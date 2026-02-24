@@ -8,7 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 # ──────────────────────────────────────────────
-TOKEN = "8645128580:AAE01cRpbAjbozxVhff6L4zf-R_xAhBPj1A"          # ← замени на свой токен от BotFather
+TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"          # ← замени на свой токен от BotFather
 ADMIN_ID = 462740408                 # ← твой Telegram ID (узнай через @userinfobot)
 # ──────────────────────────────────────────────
 
@@ -142,4 +142,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+
     asyncio.run(main())
