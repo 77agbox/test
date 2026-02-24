@@ -11,7 +11,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # ──────────────────────────────────────────────
 TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
-ADMIN_ID = 462740408  # @sergienkoalvl
+ADMIN_ID = 462740408  # @sergienkoalvl — сюда приходят заявки и поддержка
 # ──────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO)
@@ -284,7 +284,7 @@ async def mc_phone(message: types.Message, state: FSMContext):
     mc = data["selected_mc"]
 
     order_text = (
-        f"🛒 Запись на мастер-класс\n\n"
+        f"🛒 НОВАЯ ЗАЯВКА НА МАСТЕР-КЛАСС\n\n"
         f"Мастер-класс: {mc['title']}\n"
         f"Дата и время: {mc['date']} {mc['time']}\n"
         f"Адрес: {mc['address']}\n"
@@ -298,7 +298,7 @@ async def mc_phone(message: types.Message, state: FSMContext):
 
     await message.answer(
         f"Вы записаны на «{mc['title']}»!\n"
-        "Менеджер свяжется с вами для подтверждения.\n\n"
+        "Менеджер свяжется с вами в ближайшее время для подтверждения.\n\n"
         f"Подробности: {mc['description_link']}",
         reply_markup=bottom_kb,
         disable_web_page_preview=False
