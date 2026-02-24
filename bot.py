@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart, Command, StateFilter
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -14,12 +14,7 @@ TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
 ADMIN_ID = 6748745225  # @dyutsvictoriya
 # ──────────────────────────────────────────────
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-
+logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
@@ -27,12 +22,12 @@ dp = Dispatcher(storage=storage)
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
 
 PACKAGE_MODULES = {
-    "Картинг": {"prices": [2200, 2100, 2000]},
-    "Симрейсинг": {"prices": [1600, 1500, 1400]},
+    "Картинг":          {"prices": [2200, 2100, 2000]},
+    "Симрейсинг":       {"prices": [1600, 1500, 1400]},
     "Практическая стрельба": {"prices": [1600, 1500, 1400]},
-    "Лазертаг": {"prices": [1600, 1500, 1400]},
-    "Керамика": {"prices": [1600, 1500, 1400]},
-    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
+    "Лазертаг":         {"prices": [1600, 1500, 1400]},
+    "Керамика":         {"prices": [1600, 1500, 1400]},
+    "Мягкая игрушка":   {"prices": [1300, 1200, 1100]},
 }
 
 class PackageForm(StatesGroup):
@@ -53,7 +48,6 @@ MASTERCLASSES = {
             "price": 1500,
             "description_link": "https://t.me/dyutsvictory/3726"
         }
-        # Добавляй новые мастер-классы по адресу
     ],
     "СП Щербинка":      [],
     "МХС Аннино":       [],
@@ -100,10 +94,11 @@ def get_activities_keyboard(selected=None):
         text = f"{module} {'✅' if module in selected else ''}"
         builder.button(text=text)
     builder.button(text="Готово")
+    builder.button(text="Назад")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
-# ─── СТАРТ И ГЛАВНОЕ МЕНЮ ───────────────────────────────────────────────────
+# ─── СТАРТ ───────────────────────────────────────────────────────────────────
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -112,6 +107,8 @@ async def cmd_start(message: types.Message):
         "Здесь можно подобрать пакетный тур или записаться на мастер-класс.",
         reply_markup=main_kb
     )
+
+# ─── НАЧАТЬ ЗАНОВО ───────────────────────────────────────────────────────────
 
 @dp.message(lambda m: m.text == "Начать заново")
 async def restart(message: types.Message, state: FSMContext):
@@ -170,6 +167,10 @@ async def package_activities(message: types.Message, state: FSMContext):
             return
         await state.set_state(PackageForm.name)
         await message.answer("Как к вам обращаться? (имя)", reply_markup=ReplyKeyboardRemove())
+        return
+    if text == "Назад":
+        await state.clear()
+        await message.answer("Вернулись в главное меню", reply_markup=main_kb)
         return
 
     data = await state.get_data()
@@ -233,11 +234,11 @@ async def package_finish(message: types.Message, state: FSMContext):
         f"<b>Итого: {total} ₽</b>"
     )
 
-    for name, uid in MANAGERS.items():
+    for uid in MANAGERS.values():
         try:
             await bot.send_message(uid, order_text, parse_mode="HTML")
         except Exception as e:
-            logger.error(f"Ошибка отправки {name} ({uid}): {e}")
+            logging.error(f"Ошибка отправки: {e}")
 
     await message.answer("Запрос отправлен менеджерам. Скоро с вами свяжутся!", reply_markup=main_kb)
     await state.clear()
@@ -363,11 +364,11 @@ async def mc_phone(message: types.Message, state: FSMContext):
         f"Телефон: {message.text.strip()}"
     )
 
-    for name, uid in MANAGERS.items():
+    for uid in MANAGERS.values():
         try:
             await bot.send_message(uid, order_text, parse_mode="HTML", disable_web_page_preview=False)
         except Exception as e:
-            logger.error(f"Ошибка отправки {name}: {e}")
+            logging.error(f"Ошибка отправки: {e}")
 
     await message.answer(
         f"Вы записаны на «{mc['title']}»!\n"
