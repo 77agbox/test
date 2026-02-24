@@ -11,7 +11,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # ──────────────────────────────────────────────
 TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
-ADMIN_ID = 462740408  # @sergienkoalvl
+ADMIN_ID = 462740408  # @sergienkoalvl — сюда приходят заявки и поддержка
 # ──────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO)
@@ -22,12 +22,12 @@ dp = Dispatcher(storage=storage)
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
 
 PACKAGE_MODULES = {
-    "Картинг": {"prices": [2200, 2100, 2000]},
-    "Симрейсинг": {"prices": [1600, 1500, 1400]},
+    "Картинг":          {"prices": [2200, 2100, 2000]},
+    "Симрейсинг":       {"prices": [1600, 1500, 1400]},
     "Практическая стрельба": {"prices": [1600, 1500, 1400]},
-    "Лазертаг": {"prices": [1600, 1500, 1400]},
-    "Керамика": {"prices": [1600, 1500, 1400]},
-    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
+    "Лазертаг":         {"prices": [1600, 1500, 1400]},
+    "Керамика":         {"prices": [1600, 1500, 1400]},
+    "Мягкая игрушка":   {"prices": [1300, 1200, 1100]},
 }
 
 class PackageForm(StatesGroup):
@@ -77,6 +77,11 @@ main_kb = get_main_keyboard()
 def get_back_keyboard():
     builder = ReplyKeyboardBuilder()
     builder.button(text="Назад")
+    return builder.as_markup(resize_keyboard=True)
+
+def get_restart_keyboard():
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="Начать заново")
     return builder.as_markup(resize_keyboard=True)
 
 def get_addresses_keyboard():
