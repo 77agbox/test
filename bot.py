@@ -11,7 +11,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # ──────────────────────────────────────────────
 TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
-ADMIN_ID = 462740408  # @sergienkoalvl
+ADMIN_ID = 462740408  # @sergienkoalvl — сюда приходят заявки и поддержка
 # ──────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO)
@@ -46,7 +46,14 @@ MASTERCLASSES = {
             "date": "04.03.2026",
             "time": "17:00",
             "price": 1500,
-            "description_link": "https://t.me/dyutsvictory/3726"
+            "description_link": "https://t.me/dyutsvictory/3733"
+        },
+        {
+            "title": "Сумочка для телефона",
+            "date": "26.02.2026",
+            "time": "17:00",
+            "price": 1500,
+            "description_link": "https://t.me/dyutsvictory/3733"  # если ссылка другая — замени
         }
     ],
     "СП Щербинка":      [],
@@ -58,50 +65,50 @@ ADDRESSES = list(MASTERCLASSES.keys())
 
 class MasterclassForm(StatesGroup):
     address      = State()
+    list_view    = State()
     detail_view  = State()
     name         = State()
     phone        = State()
 
 # ─── КЛАВИАТУРЫ ──────────────────────────────────────────────────────────────
 
-def get_main_keyboard():
+def get_bottom_keyboard():
     builder = ReplyKeyboardBuilder()
-    builder.button(text="Пакетные туры")
-    builder.button(text="Мастер-классы")
+    builder.button(text="Назад")
     builder.button(text="Написать в поддержку")
-    builder.adjust(1)
+    builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
-main_kb = get_main_keyboard()
+bottom_kb = get_bottom_keyboard()
 
-def get_back_keyboard():
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="Назад")
-    return builder.as_markup(resize_keyboard=True)
+def get_main_inline_keyboard():
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Пакетные туры", callback_data="main_package")],
+        [InlineKeyboardButton(text="Мастер-классы", callback_data="main_masterclass")]
+    ])
+    return keyboard
 
-def get_restart_keyboard():
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="Начать заново")
-    return builder.as_markup(resize_keyboard=True)
-
-def get_addresses_keyboard():
-    builder = ReplyKeyboardBuilder()
+def get_addresses_inline_keyboard():
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     for addr in ADDRESSES:
-        builder.button(text=addr)
-    builder.button(text="Назад")
-    builder.adjust(2)
-    return builder.as_markup(resize_keyboard=True)
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text=addr, callback_data=f"addr_{addr}")])
+    keyboard.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
+    return keyboard
 
-def get_activities_keyboard(selected=None):
-    selected = selected or []
-    builder = ReplyKeyboardBuilder()
-    for module in PACKAGE_MODULES:
-        text = f"{module} {'✅' if module in selected else ''}"
-        builder.button(text=text)
-    builder.button(text="Готово")
-    builder.button(text="Назад")
-    builder.adjust(2)
-    return builder.as_markup(resize_keyboard=True)
+def get_masterclasses_inline_keyboard(mcs):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+    for mc in mcs:
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text=f"{mc['title']} — {mc['date']}", callback_data=f"mc_select_{mc['title']}")])
+    keyboard.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_addresses")])
+    return keyboard
+
+def get_mc_actions_inline_keyboard(title):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Подробнее", callback_data=f"mc_detail_{title}")],
+        [InlineKeyboardButton(text="Записаться", callback_data=f"mc_signup_{title}")],
+        [InlineKeyboardButton(text="Назад", callback_data="back_to_mcs")]
+    ])
+    return keyboard
 
 # ─── СТАРТ ───────────────────────────────────────────────────────────────────
 
@@ -110,15 +117,9 @@ async def cmd_start(message: types.Message):
     await message.answer(
         "Здравствуйте, я бот Центра «Виктория».\n\n"
         "Здесь можно подобрать пакетный тур или записаться на мастер-класс.",
-        reply_markup=main_kb
+        reply_markup=bottom_kb
     )
-
-# ─── НАЧАТЬ ЗАНОВО ───────────────────────────────────────────────────────────
-
-@dp.message(lambda m: m.text == "Начать заново")
-async def restart(message: types.Message, state: FSMContext):
-    await state.clear()
-    await cmd_start(message)
+    await message.answer("Выберите действие:", reply_markup=get_main_inline_keyboard())
 
 # ─── НАПИСАТЬ В ПОДДЕРЖКУ ───────────────────────────────────────────────────
 
@@ -137,270 +138,128 @@ async def forward_to_support(message: types.Message, state: FSMContext):
         f"Сообщение от {message.from_user.full_name} (@{message.from_user.username or 'нет'}):\n\n"
         f"{message.text}"
     )
-    await message.answer("Сообщение отправлено администратору. Спасибо!")
+    await message.answer("Сообщение отправлено администратору. Спасибо!", reply_markup=bottom_kb)
     await state.clear()
-    await message.answer("Вернуться в меню?", reply_markup=main_kb)
 
-# ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
+# ─── ГЛАВНОЕ МЕНЮ (инлайн) ──────────────────────────────────────────────────
 
-@dp.message(lambda m: m.text == "Пакетные туры")
-async def start_package(message: types.Message, state: FSMContext):
-    await state.set_state(PackageForm.num_people)
-    await message.answer("Сколько человек в вашей группе?", reply_markup=ReplyKeyboardRemove())
+@dp.callback_query(lambda c: c.data.startswith("main_"))
+async def main_menu_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = callback.data
 
-@dp.message(PackageForm.num_people)
-async def package_num_people(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if text == "Назад":
-        await state.clear()
-        await message.answer("Вернулись в главное меню", reply_markup=main_kb)
-        return
-
-    try:
-        num = int(text)
-        if num < 1:
-            await message.answer("Введите положительное число.")
-            return
-        await state.update_data(num_people=num, selected_activities=[])
-        await state.set_state(PackageForm.activities)
-        await message.answer("Выберите 1–3 активности:", reply_markup=get_activities_keyboard())
-    except ValueError:
-        await message.answer("Пожалуйста, введите число.")
-
-@dp.message(PackageForm.activities)
-async def package_activities(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if text == "Готово":
-        data = await state.get_data()
-        selected = data.get("selected_activities", [])
-        if not 1 <= len(selected) <= 3:
-            await message.answer("Выберите от 1 до 3 активностей.")
-            return
-        await state.set_state(PackageForm.name)
-        await message.answer("Как к вам обращаться? (имя)", reply_markup=ReplyKeyboardRemove())
-        return
-    if text == "Назад":
+    if data == "main_package":
         await state.set_state(PackageForm.num_people)
-        await message.answer("Сколько человек в группе?", reply_markup=ReplyKeyboardRemove())
-        return
+        await callback.message.edit_text("Сколько человек в вашей группе?", reply_markup=ReplyKeyboardRemove())
+    elif data == "main_masterclass":
+        await state.set_state(MasterclassForm.address)
+        await callback.message.edit_text("Выберите адрес:", reply_markup=get_addresses_inline_keyboard())
 
-    data = await state.get_data()
-    selected = data.get("selected_activities", [])
-    module_name = text.replace(" ✅", "")
-    if module_name in PACKAGE_MODULES:
-        if module_name in selected:
-            selected.remove(module_name)
-        else:
-            if len(selected) < 3:
-                selected.append(module_name)
-            else:
-                await message.answer("Максимум 3 активности.")
-                return
-        await state.update_data(selected_activities=selected)
-        await message.answer(
-            "Выбрано: " + ", ".join(selected) if selected else "Пока ничего",
-            reply_markup=get_activities_keyboard(selected)
-        )
-
-@dp.message(PackageForm.name)
-async def package_name(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if text == "Назад":
-        await state.set_state(PackageForm.activities)
-        await message.answer("Выберите активности:", reply_markup=get_activities_keyboard())
-        return
-
-    await state.update_data(name=text)
-    await state.set_state(PackageForm.phone)
-    await message.answer("Ваш номер телефона для связи")
-
-@dp.message(PackageForm.phone)
-async def package_phone(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if text == "Назад":
-        await state.set_state(PackageForm.name)
-        await message.answer("Как к вам обращаться? (имя)", reply_markup=ReplyKeyboardRemove())
-        return
-
-    await state.update_data(phone=text)
-    await state.set_state(PackageForm.date)
-    await message.answer("Желаемая дата и время (или «любое»)")
-
-@dp.message(PackageForm.date)
-async def package_finish(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if text == "Назад":
-        await state.set_state(PackageForm.phone)
-        await message.answer("Ваш номер телефона для связи")
-        return
-
-    data = await state.get_data()
-    await state.update_data(date=text)
-
-    selected = data["selected_activities"]
-    num_act = len(selected)
-    num_p = data["num_people"]
-
-    price_idx = num_act - 1
-    total = 0
-    lines = []
-    for act in selected:
-        p = PACKAGE_MODULES[act]["prices"][price_idx]
-        cost = p * num_p
-        total += cost
-        lines.append(f"{act}: {p} ₽/чел × {num_p} = {cost} ₽")
-
-    lines_text = "\n".join(lines)
-
-    order_text = (
-        "🛒 Новый пакетный тур\n\n"
-        f"Клиент: {data.get('name')}\n"
-        f"Тел: {data.get('phone')}\n"
-        f"Дата/время: {data.get('date')}\n\n"
-        f"Группа: {num_p} чел\n"
-        f"Активности ({num_act}): {', '.join(selected)}\n\n"
-        f"{lines_text}\n\n"
-        f"<b>Итого: {total} ₽</b>"
-    )
-
-    await bot.send_message(ADMIN_ID, order_text, parse_mode="HTML")
-
-    await message.answer("Запрос отправлен менеджерам. Скоро с вами свяжутся!", reply_markup=main_kb)
-    await state.clear()
+    await callback.answer()
 
 # ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
 
-@dp.message(lambda m: m.text == "Мастер-классы")
-async def mc_start(message: types.Message, state: FSMContext):
-    await state.set_state(MasterclassForm.address)
-    await message.answer("Выберите адрес:", reply_markup=get_addresses_keyboard())
-
-@dp.message(MasterclassForm.address)
-async def mc_choose_address(message: types.Message, state: FSMContext):
-    addr = message.text.strip()
-    if addr == "Назад":
-        await state.clear()
-        await message.answer("Вернулись в главное меню", reply_markup=main_kb)
-        return
-
-    if addr not in ADDRESSES:
-        await message.answer("Выберите адрес из списка.", reply_markup=get_addresses_keyboard())
-        return
-
+@dp.callback_query(lambda c: c.data.startswith("addr_"))
+async def choose_address(callback: types.CallbackQuery, state: FSMContext):
+    addr = callback.data.replace("addr_", "")
     await state.update_data(address=addr)
 
     mcs = MASTERCLASSES.get(addr, [])
     if not mcs:
-        await message.answer(
+        await callback.message.edit_text(
             f"В данный момент на адресе «{addr}» нет запланированных мастер-классов.\n\n"
             "Следите за обновлениями!",
-            reply_markup=get_back_keyboard()
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Назад", callback_data="back_to_main")]
+            ])
         )
-        return
+    else:
+        await callback.message.edit_text(
+            "Доступные мастер-классы:",
+            reply_markup=get_masterclasses_inline_keyboard(mcs)
+        )
+        await state.set_state(MasterclassForm.detail_view)
 
-    builder = ReplyKeyboardBuilder()
-    for mc in mcs:
-        builder.button(text=mc["title"])
-    builder.button(text="Назад")
-    builder.adjust(1)
+    await callback.answer()
 
-    await message.answer("Доступные мастер-классы:", reply_markup=builder.as_markup(resize_keyboard=True))
-    await state.set_state(MasterclassForm.detail_view)
-
-@dp.message(MasterclassForm.detail_view)
-async def mc_select_class(message: types.Message, state: FSMContext):
-    title = message.text.strip()
-    if title == "Назад":
-        await state.set_state(MasterclassForm.address)
-        await message.answer("Выберите адрес:", reply_markup=get_addresses_keyboard())
-        return
-
+@dp.callback_query(lambda c: c.data.startswith("mc_select_"))
+async def select_mc(callback: types.CallbackQuery, state: FSMContext):
+    title = callback.data.replace("mc_select_", "")
     data = await state.get_data()
     addr = data["address"]
     mc = next((m for m in MASTERCLASSES.get(addr, []) if m["title"] == title), None)
 
-    if not mc:
-        await message.answer("Выберите мастер-класс из списка.")
-        return
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Подробнее", callback_data=f"mc_detail_{title}")],
-        [InlineKeyboardButton(text="Записаться", callback_data=f"mc_signup_{title}")],
-        [InlineKeyboardButton(text="Назад", callback_data="mc_back")]
-    ])
-
-    await message.answer(
-        f"{mc['title']}\n"
-        f"Когда: {mc['date']} в {mc['time']}\n"
-        f"Стоимость: {mc['price']} ₽\n"
-        f"Адрес: {addr}",
-        reply_markup=keyboard
-    )
-
-@dp.callback_query(lambda c: c.data.startswith("mc_") or c.data == "mc_back")
-async def mc_callback(callback: types.CallbackQuery, state: FSMContext):
-    data = callback.data
-
-    if data == "mc_back":
-        await callback.message.delete()
-        await state.set_state(MasterclassForm.address)
-        await callback.message.answer("Выберите адрес:", reply_markup=get_addresses_keyboard())
-        await callback.answer()
-        return
-
-    if data.startswith("mc_detail_"):
-        title = data.replace("mc_detail_", "")
-        mc = next((m for addr in MASTERCLASSES for m in MASTERCLASSES[addr] if m["title"] == title), None)
-        if mc:
-            await callback.message.answer(f"Подробное описание:\n{mc['description_link']}")
-        await callback.answer()
-
-    elif data.startswith("mc_signup_"):
-        title = data.replace("mc_signup_", "")
-        mc = next((m for addr in MASTERCLASSES for m in MASTERCLASSES[addr] if m["title"] == title), None)
-        if mc:
-            await state.update_data(selected_mc=mc)
-            await state.set_state(MasterclassForm.name)
-            await callback.message.answer(
-                f"Запись на «{mc['title']}»\n\nКак к вам обращаться? (имя)",
-                reply_markup=ReplyKeyboardRemove()
-            )
-        await callback.answer()
-
-@dp.message(MasterclassForm.name)
-async def mc_name(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if text == "Назад":
-        await state.set_state(MasterclassForm.detail_view)
-        data = await state.get_data()
-        addr = data["address"]
-        mc = data["selected_mc"]
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Подробнее", callback_data=f"mc_detail_{mc['title']}")],
-            [InlineKeyboardButton(text="Записаться", callback_data=f"mc_signup_{mc['title']}")],
-            [InlineKeyboardButton(text="Назад", callback_data="mc_back")]
-        ])
-        await message.answer(
+    if mc:
+        keyboard = get_mc_actions_inline_keyboard(title)
+        await callback.message.edit_text(
             f"{mc['title']}\n"
             f"Когда: {mc['date']} в {mc['time']}\n"
             f"Стоимость: {mc['price']} ₽\n"
             f"Адрес: {addr}",
             reply_markup=keyboard
         )
-        return
 
-    await state.update_data(name=text)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("mc_detail_"))
+async def mc_detail(callback: types.CallbackQuery):
+    title = callback.data.replace("mc_detail_", "")
+    mc = next((m for addr in MASTERCLASSES for m in MASTERCLASSES[addr] if m["title"] == title), None)
+    if mc:
+        await callback.message.answer(f"Подробное описание:\n{mc['description_link']}", disable_web_page_preview=False)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("mc_signup_"))
+async def mc_signup(callback: types.CallbackQuery, state: FSMContext):
+    title = callback.data.replace("mc_signup_", "")
+    mc = next((m for addr in MASTERCLASSES for m in MASTERCLASSES[addr] if m["title"] == title), None)
+    if mc:
+        await state.update_data(selected_mc=mc)
+        await state.set_state(MasterclassForm.name)
+        await callback.message.answer(
+            f"Запись на «{mc['title']}»\n\nКак к вам обращаться? (имя)",
+            reply_markup=ReplyKeyboardRemove()
+        )
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data in ["back_to_main", "back_to_addresses", "back_to_mcs"])
+async def back_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = callback.data
+
+    if data == "back_to_main":
+        await state.clear()
+        await callback.message.edit_text(
+            "Выберите действие:",
+            reply_markup=get_main_inline_keyboard()
+        )
+
+    elif data == "back_to_addresses":
+        await state.set_state(MasterclassForm.address)
+        await callback.message.edit_text(
+            "Выберите адрес:",
+            reply_markup=get_addresses_inline_keyboard()
+        )
+
+    elif data == "back_to_mcs":
+        data = await state.get_data()
+        addr = data["address"]
+        mcs = MASTERCLASSES.get(addr, [])
+        await callback.message.edit_text(
+            "Доступные мастер-классы:",
+            reply_markup=get_masterclasses_inline_keyboard(mcs)
+        )
+
+    await callback.answer()
+
+# ─── АНКЕТА МАСТЕР-КЛАССОВ ──────────────────────────────────────────────────
+
+@dp.message(MasterclassForm.name)
+async def mc_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text.strip())
     await state.set_state(MasterclassForm.phone)
     await message.answer("Ваш номер телефона для связи")
 
 @dp.message(MasterclassForm.phone)
 async def mc_phone(message: types.Message, state: FSMContext):
-    text = message.text.strip()
-    if text == "Назад":
-        await state.set_state(MasterclassForm.name)
-        await message.answer("Как к вам обращаться? (имя)", reply_markup=ReplyKeyboardRemove())
-        return
-
     data = await state.get_data()
     mc = data["selected_mc"]
 
@@ -412,7 +271,7 @@ async def mc_phone(message: types.Message, state: FSMContext):
         f"Стоимость: {mc['price']} ₽\n"
         f"Описание: {mc['description_link']}\n\n"
         f"Клиент: {data.get('name')}\n"
-        f"Телефон: {text}"
+        f"Телефон: {message.text.strip()}"
     )
 
     await bot.send_message(ADMIN_ID, order_text, parse_mode="HTML", disable_web_page_preview=False)
@@ -421,7 +280,7 @@ async def mc_phone(message: types.Message, state: FSMContext):
         f"Вы записаны на «{mc['title']}»!\n"
         "Менеджер свяжется с вами для подтверждения.\n\n"
         f"Подробности: {mc['description_link']}",
-        reply_markup=main_kb,
+        reply_markup=bottom_kb,
         disable_web_page_preview=False
     )
     await state.clear()
