@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -27,12 +27,12 @@ dp = Dispatcher(storage=storage)
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
 
 PACKAGE_MODULES = {
-    "Картинг":          {"prices": [2200, 2100, 2000]},
-    "Симрейсинг":       {"prices": [1600, 1500, 1400]},
+    "Картинг": {"prices": [2200, 2100, 2000]},
+    "Симрейсинг": {"prices": [1600, 1500, 1400]},
     "Практическая стрельба": {"prices": [1600, 1500, 1400]},
-    "Лазертаг":         {"prices": [1600, 1500, 1400]},
-    "Керамика":         {"prices": [1600, 1500, 1400]},
-    "Мягкая игрушка":   {"prices": [1300, 1200, 1100]},
+    "Лазертаг": {"prices": [1600, 1500, 1400]},
+    "Керамика": {"prices": [1600, 1500, 1400]},
+    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
 }
 
 class PackageForm(StatesGroup):
@@ -53,7 +53,7 @@ MASTERCLASSES = {
             "price": 1500,
             "description_link": "https://t.me/dyutsvictory/3726"
         }
-        # сюда добавляй новые мастер-классы по этому адресу
+        # Добавляй новые мастер-классы по адресу
     ],
     "СП Щербинка":      [],
     "МХС Аннино":       [],
@@ -68,7 +68,7 @@ class MasterclassForm(StatesGroup):
     name         = State()
     phone        = State()
 
-# ─── ОБЩИЕ КЛАВИАТУРЫ ────────────────────────────────────────────────────────
+# ─── КЛАВИАТУРЫ ──────────────────────────────────────────────────────────────
 
 def get_main_keyboard():
     builder = ReplyKeyboardBuilder()
@@ -118,30 +118,17 @@ async def restart(message: types.Message, state: FSMContext):
     await state.clear()
     await cmd_start(message)
 
+# ─── НАПИСАТЬ В ПОДДЕРЖКУ ───────────────────────────────────────────────────
+
 @dp.message(lambda m: m.text == "Написать в поддержку")
-async def support(message: types.Message):
+async def start_support(message: types.Message, state: FSMContext):
     await message.answer(
         "Напишите ваше сообщение, и оно будет отправлено администратору.",
         reply_markup=ReplyKeyboardRemove()
     )
     await state.set_state("support_message")
 
-@dp.message(lambda m: m.text in ["Пакетные туры", "Мастер-классы"])
-async def main_menu_handler(message: types.Message, state: FSMContext):
-    text = message.text
-    await state.clear()
-
-    if text == "Пакетные туры":
-        await state.set_state(PackageForm.num_people)
-        await message.answer("Сколько человек в вашей группе?", reply_markup=ReplyKeyboardRemove())
-
-    elif text == "Мастер-классы":
-        await state.set_state(MasterclassForm.address)
-        await message.answer("Выберите адрес:", reply_markup=get_addresses_keyboard())
-
-# ─── ПОДДЕРЖКА ───────────────────────────────────────────────────────────────
-
-@dp.message(state="support_message")
+@dp.message(StateFilter("support_message"))
 async def forward_to_support(message: types.Message, state: FSMContext):
     await bot.send_message(
         ADMIN_ID,
@@ -153,6 +140,11 @@ async def forward_to_support(message: types.Message, state: FSMContext):
     await message.answer("Вернуться в меню?", reply_markup=main_kb)
 
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
+
+@dp.message(lambda m: m.text == "Пакетные туры")
+async def start_package(message: types.Message, state: FSMContext):
+    await state.set_state(PackageForm.num_people)
+    await message.answer("Сколько человек в вашей группе?", reply_markup=ReplyKeyboardRemove())
 
 @dp.message(PackageForm.num_people)
 async def package_num_people(message: types.Message, state: FSMContext):
@@ -252,6 +244,11 @@ async def package_finish(message: types.Message, state: FSMContext):
 
 # ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
 
+@dp.message(lambda m: m.text == "Мастер-классы")
+async def mc_start(message: types.Message, state: FSMContext):
+    await state.set_state(MasterclassForm.address)
+    await message.answer("Выберите адрес:", reply_markup=get_addresses_keyboard())
+
 @dp.message(MasterclassForm.address)
 async def mc_choose_address(message: types.Message, state: FSMContext):
     addr = message.text.strip()
@@ -343,6 +340,43 @@ async def mc_callback(callback: types.CallbackQuery, state: FSMContext):
                 reply_markup=ReplyKeyboardRemove()
             )
         await callback.answer()
+
+@dp.message(MasterclassForm.name)
+async def mc_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text.strip())
+    await state.set_state(MasterclassForm.phone)
+    await message.answer("Ваш номер телефона для связи")
+
+@dp.message(MasterclassForm.phone)
+async def mc_phone(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    mc = data["selected_mc"]
+
+    order_text = (
+        f"🛒 Запись на мастер-класс\n\n"
+        f"Мастер-класс: {mc['title']}\n"
+        f"Дата и время: {mc['date']} {mc['time']}\n"
+        f"Адрес: {mc['address']}\n"
+        f"Стоимость: {mc['price']} ₽\n"
+        f"Описание: {mc['description_link']}\n\n"
+        f"Клиент: {data.get('name')}\n"
+        f"Телефон: {message.text.strip()}"
+    )
+
+    for name, uid in MANAGERS.items():
+        try:
+            await bot.send_message(uid, order_text, parse_mode="HTML", disable_web_page_preview=False)
+        except Exception as e:
+            logger.error(f"Ошибка отправки {name}: {e}")
+
+    await message.answer(
+        f"Вы записаны на «{mc['title']}»!\n"
+        "Менеджер свяжется с вами для подтверждения.\n\n"
+        f"Подробности: {mc['description_link']}",
+        reply_markup=main_kb,
+        disable_web_page_preview=False
+    )
+    await state.clear()
 
 # ─── ЗАПУСК ──────────────────────────────────────────────────────────────────
 
