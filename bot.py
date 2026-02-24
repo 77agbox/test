@@ -11,7 +11,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # ──────────────────────────────────────────────
 TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
-ADMIN_ID = 462740408  # @sergienkoalvl — сюда приходят заявки и поддержка
+ADMIN_ID = 462740408  # @sergienkoalvl
 # ──────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO)
@@ -22,12 +22,12 @@ dp = Dispatcher(storage=storage)
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
 
 PACKAGE_MODULES = {
-    "Картинг": {"prices": [2200, 2100, 2000]},
-    "Симрейсинг": {"prices": [1600, 1500, 1400]},
+    "Картинг":          {"prices": [2200, 2100, 2000]},
+    "Симрейсинг":       {"prices": [1600, 1500, 1400]},
     "Практическая стрельба": {"prices": [1600, 1500, 1400]},
-    "Лазертаг": {"prices": [1600, 1500, 1400]},
-    "Керамика": {"prices": [1600, 1500, 1400]},
-    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
+    "Лазертаг":         {"prices": [1600, 1500, 1400]},
+    "Керамика":         {"prices": [1600, 1500, 1400]},
+    "Мягкая игрушка":   {"prices": [1300, 1200, 1100]},
 }
 
 class PackageForm(StatesGroup):
@@ -53,7 +53,7 @@ MASTERCLASSES = {
             "date": "26.02.2026",
             "time": "17:00",
             "price": 1500,
-            "description_link": "https://t.me/dyutsvictory/3733"  # если ссылка другая — замени
+            "description_link": "https://t.me/dyutsvictory/3733"
         }
     ],
     "СП Щербинка":      [],
@@ -74,7 +74,7 @@ class MasterclassForm(StatesGroup):
 
 def get_bottom_keyboard():
     builder = ReplyKeyboardBuilder()
-    builder.button(text="Назад")
+    builder.button(text="Начать заново")
     builder.button(text="Написать в поддержку")
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
@@ -90,16 +90,29 @@ def get_main_inline_keyboard():
 
 def get_addresses_inline_keyboard():
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+
     for addr in ADDRESSES:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text=addr, callback_data=f"addr_{addr}")])
-    keyboard.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
+        count = len(MASTERCLASSES.get(addr, []))
+        text = f"{addr} ({count})" if count > 0 else addr
+        keyboard.inline_keyboard.append([
+            InlineKeyboardButton(text=text, callback_data=f"addr_{addr}")
+        ])
+
+    keyboard.inline_keyboard.append([
+        InlineKeyboardButton(text="Назад", callback_data="back_to_main")
+    ])
     return keyboard
 
 def get_masterclasses_inline_keyboard(mcs):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     for mc in mcs:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text=f"{mc['title']} — {mc['date']}", callback_data=f"mc_select_{mc['title']}")])
-    keyboard.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_addresses")])
+        text = f"{mc['title']} — {mc['date']}"
+        keyboard.inline_keyboard.append([
+            InlineKeyboardButton(text=text, callback_data=f"mc_select_{mc['title']}")
+        ])
+    keyboard.inline_keyboard.append([
+        InlineKeyboardButton(text="Назад", callback_data="back_to_addresses")
+    ])
     return keyboard
 
 def get_mc_actions_inline_keyboard(title):
@@ -120,6 +133,13 @@ async def cmd_start(message: types.Message):
         reply_markup=bottom_kb
     )
     await message.answer("Выберите действие:", reply_markup=get_main_inline_keyboard())
+
+# ─── НАЧАТЬ ЗАНОВО ───────────────────────────────────────────────────────────
+
+@dp.message(lambda m: m.text == "Начать заново")
+async def restart(message: types.Message, state: FSMContext):
+    await state.clear()
+    await cmd_start(message)
 
 # ─── НАПИСАТЬ В ПОДДЕРЖКУ ───────────────────────────────────────────────────
 
