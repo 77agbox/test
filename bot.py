@@ -22,12 +22,12 @@ dp = Dispatcher(storage=storage)
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
 
 PACKAGE_MODULES = {
-    "Картинг":          {"prices": [2200, 2100, 2000]},
-    "Симрейсинг":       {"prices": [1600, 1500, 1400]},
+    "Картинг": {"prices": [2200, 2100, 2000]},
+    "Симрейсинг": {"prices": [1600, 1500, 1400]},
     "Практическая стрельба": {"prices": [1600, 1500, 1400]},
-    "Лазертаг":         {"prices": [1600, 1500, 1400]},
-    "Керамика":         {"prices": [1600, 1500, 1400]},
-    "Мягкая игрушка":   {"prices": [1300, 1200, 1100]},
+    "Лазертаг": {"prices": [1600, 1500, 1400]},
+    "Керамика": {"prices": [1600, 1500, 1400]},
+    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
 }
 
 class PackageForm(StatesGroup):
@@ -181,7 +181,7 @@ async def main_menu_callback(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("addr_"))
 async def choose_address(callback: types.CallbackQuery, state: FSMContext):
     addr = callback.data.replace("addr_", "")
-    await state.update_data(address=addr)
+    await state.update_data(address=addr)  # ← сохраняем адрес в состояние
 
     mcs = MASTERCLASSES.get(addr, [])
     if not mcs:
@@ -205,7 +205,7 @@ async def choose_address(callback: types.CallbackQuery, state: FSMContext):
 async def select_mc(callback: types.CallbackQuery, state: FSMContext):
     title = callback.data.replace("mc_select_", "")
     data = await state.get_data()
-    addr = data["address"]
+    addr = data.get("address", "неизвестно")  # ← берём адрес из состояния
     mc = next((m for m in MASTERCLASSES.get(addr, []) if m["title"] == title), None)
 
     if mc:
@@ -261,7 +261,7 @@ async def back_callback(callback: types.CallbackQuery, state: FSMContext):
 
     elif data == "back_to_mcs":
         data = await state.get_data()
-        addr = data["address"]
+        addr = data.get("address", "неизвестно")
         mcs = MASTERCLASSES.get(addr, [])
         await callback.message.edit_text(
             "Доступные мастер-классы:",
@@ -281,16 +281,21 @@ async def mc_name(message: types.Message, state: FSMContext):
 @dp.message(MasterclassForm.phone)
 async def mc_phone(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    mc = data["selected_mc"]
+    mc = data.get("selected_mc")
+
+    if not mc:
+        await message.answer("Ошибка: данные мастер-класса не найдены. Начните заново.", reply_markup=bottom_kb)
+        await state.clear()
+        return
 
     order_text = (
         f"🛒 НОВАЯ ЗАЯВКА НА МАСТЕР-КЛАСС\n\n"
         f"Мастер-класс: {mc['title']}\n"
         f"Дата и время: {mc['date']} {mc['time']}\n"
-        f"Адрес: {mc['address']}\n"
+        f"Адрес: {data.get('address', 'не указан')}\n"
         f"Стоимость: {mc['price']} ₽\n"
         f"Описание: {mc['description_link']}\n\n"
-        f"Клиент: {data.get('name')}\n"
+        f"Клиент: {data.get('name', 'не указано')}\n"
         f"Телефон: {message.text.strip()}"
     )
 
