@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -11,10 +11,15 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # ──────────────────────────────────────────────
 TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
-ADMIN_ID = 6748745225  # @dyutsvictoriya
+ADMIN_ID = 462740408  # @sergienkoalvl
 # ──────────────────────────────────────────────
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
@@ -22,12 +27,12 @@ dp = Dispatcher(storage=storage)
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
 
 PACKAGE_MODULES = {
-    "Картинг":          {"prices": [2200, 2100, 2000]},
-    "Симрейсинг":       {"prices": [1600, 1500, 1400]},
+    "Картинг": {"prices": [2200, 2100, 2000]},
+    "Симрейсинг": {"prices": [1600, 1500, 1400]},
     "Практическая стрельба": {"prices": [1600, 1500, 1400]},
-    "Лазертаг":         {"prices": [1600, 1500, 1400]},
-    "Керамика":         {"prices": [1600, 1500, 1400]},
-    "Мягкая игрушка":   {"prices": [1300, 1200, 1100]},
+    "Лазертаг": {"prices": [1600, 1500, 1400]},
+    "Керамика": {"prices": [1600, 1500, 1400]},
+    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
 }
 
 class PackageForm(StatesGroup):
@@ -234,11 +239,7 @@ async def package_finish(message: types.Message, state: FSMContext):
         f"<b>Итого: {total} ₽</b>"
     )
 
-    for uid in MANAGERS.values():
-        try:
-            await bot.send_message(uid, order_text, parse_mode="HTML")
-        except Exception as e:
-            logging.error(f"Ошибка отправки: {e}")
+    await bot.send_message(ADMIN_ID, order_text, parse_mode="HTML")
 
     await message.answer("Запрос отправлен менеджерам. Скоро с вами свяжутся!", reply_markup=main_kb)
     await state.clear()
@@ -364,11 +365,7 @@ async def mc_phone(message: types.Message, state: FSMContext):
         f"Телефон: {message.text.strip()}"
     )
 
-    for uid in MANAGERS.values():
-        try:
-            await bot.send_message(uid, order_text, parse_mode="HTML", disable_web_page_preview=False)
-        except Exception as e:
-            logging.error(f"Ошибка отправки: {e}")
+    await bot.send_message(ADMIN_ID, order_text, parse_mode="HTML", disable_web_page_preview=False)
 
     await message.answer(
         f"Вы записаны на «{mc['title']}»!\n"
