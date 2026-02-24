@@ -14,12 +14,7 @@ TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
 ADMIN_ID = 462740408  # @sergienkoalvl
 # ──────────────────────────────────────────────
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-
+logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
