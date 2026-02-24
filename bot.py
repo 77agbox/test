@@ -11,7 +11,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # ──────────────────────────────────────────────
 TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
-ADMIN_ID = 462740408  # @sergienkoalvl — сюда приходят заявки и поддержка
+ADMIN_ID = 462740408  # @sergienkoalvl
 # ──────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO)
@@ -90,14 +90,12 @@ def get_main_inline_keyboard():
 
 def get_addresses_inline_keyboard():
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
-
     for addr in ADDRESSES:
         count = len(MASTERCLASSES.get(addr, []))
         text = f"{addr} ({count})" if count > 0 else addr
         keyboard.inline_keyboard.append([
             InlineKeyboardButton(text=text, callback_data=f"addr_{addr}")
         ])
-
     keyboard.inline_keyboard.append([
         InlineKeyboardButton(text="Назад", callback_data="back_to_main")
     ])
@@ -163,17 +161,22 @@ async def forward_to_support(message: types.Message, state: FSMContext):
 
 # ─── ГЛАВНОЕ МЕНЮ (инлайн) ──────────────────────────────────────────────────
 
-@dp.callback_query(lambda c: c.data.startswith("main_"))
-async def main_menu_callback(callback: types.CallbackQuery, state: FSMContext):
-    data = callback.data
+@dp.callback_query(lambda c: c.data == "main_package")
+async def start_package(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(PackageForm.num_people)
+    await callback.message.answer(
+        "Сколько человек в вашей группе?",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await callback.answer()
 
-    if data == "main_package":
-        await state.set_state(PackageForm.num_people)
-        await callback.message.edit_text("Сколько человек в вашей группе?", reply_markup=ReplyKeyboardRemove())
-    elif data == "main_masterclass":
-        await state.set_state(MasterclassForm.address)
-        await callback.message.edit_text("Выберите адрес:", reply_markup=get_addresses_inline_keyboard())
-
+@dp.callback_query(lambda c: c.data == "main_masterclass")
+async def start_masterclass(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(MasterclassForm.address)
+    await callback.message.answer(
+        "Выберите адрес:",
+        reply_markup=get_addresses_inline_keyboard()
+    )
     await callback.answer()
 
 # ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
@@ -181,7 +184,7 @@ async def main_menu_callback(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("addr_"))
 async def choose_address(callback: types.CallbackQuery, state: FSMContext):
     addr = callback.data.replace("addr_", "")
-    await state.update_data(address=addr)  # ← сохраняем адрес в состояние
+    await state.update_data(address=addr)
 
     mcs = MASTERCLASSES.get(addr, [])
     if not mcs:
@@ -205,7 +208,7 @@ async def choose_address(callback: types.CallbackQuery, state: FSMContext):
 async def select_mc(callback: types.CallbackQuery, state: FSMContext):
     title = callback.data.replace("mc_select_", "")
     data = await state.get_data()
-    addr = data.get("address", "неизвестно")  # ← берём адрес из состояния
+    addr = data.get("address", "не указан")
     mc = next((m for m in MASTERCLASSES.get(addr, []) if m["title"] == title), None)
 
     if mc:
@@ -261,7 +264,7 @@ async def back_callback(callback: types.CallbackQuery, state: FSMContext):
 
     elif data == "back_to_mcs":
         data = await state.get_data()
-        addr = data.get("address", "неизвестно")
+        addr = data.get("address", "не указан")
         mcs = MASTERCLASSES.get(addr, [])
         await callback.message.edit_text(
             "Доступные мастер-классы:",
@@ -282,6 +285,7 @@ async def mc_name(message: types.Message, state: FSMContext):
 async def mc_phone(message: types.Message, state: FSMContext):
     data = await state.get_data()
     mc = data.get("selected_mc")
+    addr = data.get("address", "не указан")
 
     if not mc:
         await message.answer("Ошибка: данные мастер-класса не найдены. Начните заново.", reply_markup=bottom_kb)
@@ -292,7 +296,7 @@ async def mc_phone(message: types.Message, state: FSMContext):
         f"🛒 НОВАЯ ЗАЯВКА НА МАСТЕР-КЛАСС\n\n"
         f"Мастер-класс: {mc['title']}\n"
         f"Дата и время: {mc['date']} {mc['time']}\n"
-        f"Адрес: {data.get('address', 'не указан')}\n"
+        f"Адрес: {addr}\n"
         f"Стоимость: {mc['price']} ₽\n"
         f"Описание: {mc['description_link']}\n\n"
         f"Клиент: {data.get('name', 'не указано')}\n"
