@@ -101,6 +101,16 @@ def get_addresses_inline_keyboard():
     ])
     return keyboard
 
+def get_activities_keyboard(selected=None):
+    selected = selected or []
+    builder = ReplyKeyboardBuilder()
+    for module in PACKAGE_MODULES:
+        text = f"{module} {'✅' if module in selected else ''}"
+        builder.button(text=text)
+    builder.button(text="Готово")
+    builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True)
+
 def get_masterclasses_inline_keyboard(mcs):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     for mc in mcs:
@@ -178,6 +188,129 @@ async def start_masterclass(callback: types.CallbackQuery, state: FSMContext):
         reply_markup=get_addresses_inline_keyboard()
     )
     await callback.answer()
+
+# ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
+
+@dp.message(PackageForm.num_people)
+async def package_num_people(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+    if text == "Начать заново":
+        await state.clear()
+        await cmd_start(message)
+        return
+
+    try:
+        num = int(text)
+        if num < 1:
+            await message.answer("Введите положительное число.")
+            return
+        await state.update_data(num_people=num, selected_activities=[])
+        await state.set_state(PackageForm.activities)
+        await message.answer("Выберите 1–3 активности:", reply_markup=get_activities_keyboard())
+    except ValueError:
+        await message.answer("Пожалуйста, введите число.")
+
+@dp.message(PackageForm.activities)
+async def package_activities(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+    if text == "Начать заново":
+        await state.clear()
+        await cmd_start(message)
+        return
+
+    if text == "Готово":
+        data = await state.get_data()
+        selected = data.get("selected_activities", [])
+        if not 1 <= len(selected) <= 3:
+            await message.answer("Выберите от 1 до 3 активностей.")
+            return
+        await state.set_state(PackageForm.name)
+        await message.answer("Как к вам обращаться? (имя)", reply_markup=ReplyKeyboardRemove())
+        return
+
+    data = await state.get_data()
+    selected = data.get("selected_activities", [])
+    module_name = text.replace(" ✅", "")
+    if module_name in PACKAGE_MODULES:
+        if module_name in selected:
+            selected.remove(module_name)
+        else:
+            if len(selected) < 3:
+                selected.append(module_name)
+            else:
+                await message.answer("Максимум 3 активности.")
+                return
+        await state.update_data(selected_activities=selected)
+        await message.answer(
+            "Выбрано: " + ", ".join(selected) if selected else "Пока ничего",
+            reply_markup=get_activities_keyboard(selected)
+        )
+
+@dp.message(PackageForm.name)
+async def package_name(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+    if text == "Начать заново":
+        await state.clear()
+        await cmd_start(message)
+        return
+
+    await state.update_data(name=text)
+    await state.set_state(PackageForm.phone)
+    await message.answer("Ваш номер телефона для связи")
+
+@dp.message(PackageForm.phone)
+async def package_phone(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+    if text == "Начать заново":
+        await state.clear()
+        await cmd_start(message)
+        return
+
+    await state.update_data(phone=text)
+    await state.set_state(PackageForm.date)
+    await message.answer("Желаемая дата и время (или «любое»)")
+
+@dp.message(PackageForm.date)
+async def package_finish(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+    if text == "Начать заново":
+        await state.clear()
+        await cmd_start(message)
+        return
+
+    data = await state.get_data()
+    await state.update_data(date=text)
+
+    selected = data["selected_activities"]
+    num_act = len(selected)
+    num_p = data["num_people"]
+
+    price_idx = num_act - 1
+    total = 0
+    lines = []
+    for act in selected:
+        p = PACKAGE_MODULES[act]["prices"][price_idx]
+        cost = p * num_p
+        total += cost
+        lines.append(f"{act}: {p} ₽/чел × {num_p} = {cost} ₽")
+
+    lines_text = "\n".join(lines)
+
+    order_text = (
+        "🛒 Новый пакетный тур\n\n"
+        f"Клиент: {data.get('name')}\n"
+        f"Тел: {data.get('phone')}\n"
+        f"Дата/время: {data.get('date')}\n\n"
+        f"Группа: {num_p} чел\n"
+        f"Активности ({num_act}): {', '.join(selected)}\n\n"
+        f"{lines_text}\n\n"
+        f"<b>Итого: {total} ₽</b>"
+    )
+
+    await bot.send_message(ADMIN_ID, order_text, parse_mode="HTML")
+
+    await message.answer("Запрос отправлен менеджерам. Скоро с вами свяжутся!", reply_markup=bottom_kb)
+    await state.clear()
 
 # ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
 
