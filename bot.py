@@ -11,7 +11,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 # ──────────────────────────────────────────────
 TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
-ADMIN_ID = 462740408  # @sergienkoalvl — сюда приходят заявки и поддержка
+ADMIN_ID = 462740408  # @sergienkoalvl
 # ──────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO)
@@ -22,12 +22,12 @@ dp = Dispatcher(storage=storage)
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
 
 PACKAGE_MODULES = {
-    "Картинг":          {"prices": [2200, 2100, 2000]},
-    "Симрейсинг":       {"prices": [1600, 1500, 1400]},
+    "Картинг": {"prices": [2200, 2100, 2000]},
+    "Симрейсинг": {"prices": [1600, 1500, 1400]},
     "Практическая стрельба": {"prices": [1600, 1500, 1400]},
-    "Лазертаг":         {"prices": [1600, 1500, 1400]},
-    "Керамика":         {"prices": [1600, 1500, 1400]},
-    "Мягкая игрушка":   {"prices": [1300, 1200, 1100]},
+    "Лазертаг": {"prices": [1600, 1500, 1400]},
+    "Керамика": {"prices": [1600, 1500, 1400]},
+    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
 }
 
 class PackageForm(StatesGroup):
@@ -150,8 +150,14 @@ async def start_package(message: types.Message, state: FSMContext):
 
 @dp.message(PackageForm.num_people)
 async def package_num_people(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+    if text == "Назад":
+        await state.clear()
+        await message.answer("Вернулись в главное меню", reply_markup=main_kb)
+        return
+
     try:
-        num = int(message.text.strip())
+        num = int(text)
         if num < 1:
             await message.answer("Введите положительное число.")
             return
@@ -174,8 +180,8 @@ async def package_activities(message: types.Message, state: FSMContext):
         await message.answer("Как к вам обращаться? (имя)", reply_markup=ReplyKeyboardRemove())
         return
     if text == "Назад":
-        await state.clear()
-        await message.answer("Вернулись в главное меню", reply_markup=main_kb)
+        await state.set_state(PackageForm.num_people)
+        await message.answer("Сколько человек в группе?", reply_markup=ReplyKeyboardRemove())
         return
 
     data = await state.get_data()
@@ -198,20 +204,38 @@ async def package_activities(message: types.Message, state: FSMContext):
 
 @dp.message(PackageForm.name)
 async def package_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
+    text = message.text.strip()
+    if text == "Назад":
+        await state.set_state(PackageForm.activities)
+        await message.answer("Выберите активности:", reply_markup=get_activities_keyboard())
+        return
+
+    await state.update_data(name=text)
     await state.set_state(PackageForm.phone)
     await message.answer("Ваш номер телефона для связи")
 
 @dp.message(PackageForm.phone)
 async def package_phone(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.text.strip())
+    text = message.text.strip()
+    if text == "Назад":
+        await state.set_state(PackageForm.name)
+        await message.answer("Как к вам обращаться? (имя)", reply_markup=ReplyKeyboardRemove())
+        return
+
+    await state.update_data(phone=text)
     await state.set_state(PackageForm.date)
     await message.answer("Желаемая дата и время (или «любое»)")
 
 @dp.message(PackageForm.date)
 async def package_finish(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+    if text == "Назад":
+        await state.set_state(PackageForm.phone)
+        await message.answer("Ваш номер телефона для связи")
+        return
+
     data = await state.get_data()
-    await state.update_data(date=message.text.strip())
+    await state.update_data(date=text)
 
     selected = data["selected_activities"]
     num_act = len(selected)
@@ -345,12 +369,38 @@ async def mc_callback(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(MasterclassForm.name)
 async def mc_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
+    text = message.text.strip()
+    if text == "Назад":
+        await state.set_state(MasterclassForm.detail_view)
+        data = await state.get_data()
+        addr = data["address"]
+        mc = data["selected_mc"]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Подробнее", callback_data=f"mc_detail_{mc['title']}")],
+            [InlineKeyboardButton(text="Записаться", callback_data=f"mc_signup_{mc['title']}")],
+            [InlineKeyboardButton(text="Назад", callback_data="mc_back")]
+        ])
+        await message.answer(
+            f"{mc['title']}\n"
+            f"Когда: {mc['date']} в {mc['time']}\n"
+            f"Стоимость: {mc['price']} ₽\n"
+            f"Адрес: {addr}",
+            reply_markup=keyboard
+        )
+        return
+
+    await state.update_data(name=text)
     await state.set_state(MasterclassForm.phone)
     await message.answer("Ваш номер телефона для связи")
 
 @dp.message(MasterclassForm.phone)
 async def mc_phone(message: types.Message, state: FSMContext):
+    text = message.text.strip()
+    if text == "Назад":
+        await state.set_state(MasterclassForm.name)
+        await message.answer("Как к вам обращаться? (имя)", reply_markup=ReplyKeyboardRemove())
+        return
+
     data = await state.get_data()
     mc = data["selected_mc"]
 
@@ -362,7 +412,7 @@ async def mc_phone(message: types.Message, state: FSMContext):
         f"Стоимость: {mc['price']} ₽\n"
         f"Описание: {mc['description_link']}\n\n"
         f"Клиент: {data.get('name')}\n"
-        f"Телефон: {message.text.strip()}"
+        f"Телефон: {text}"
     )
 
     await bot.send_message(ADMIN_ID, order_text, parse_mode="HTML", disable_web_page_preview=False)
