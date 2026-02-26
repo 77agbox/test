@@ -25,6 +25,7 @@ dp = Dispatcher(storage=storage)
 RESTART_TEXT = "Начать заново"
 
 # ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
+
 PACKAGE_MODULES = {
     "Картинг": {"prices": [2200, 2100, 2000]},
     "Симрейсинг": {"prices": [1600, 1500, 1400]},
@@ -35,12 +36,214 @@ PACKAGE_MODULES = {
 }
 
 class PackageForm(StatesGroup):
-    selected_modules = State()  # список выбранных модулей
+    selected_modules = State()
     num_people = State()
     name = State()
     phone = State()
     date = State()
+    confirm = State()
 
+
+# ─── ВЫБОР МОДУЛЕЙ ───────────────────────────────────────────────────────────
+
+@dp.callback_query(lambda c: c.data == "main_package")
+async def start_package(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await state.set_state(PackageForm.selected_modules)
+    await state.update_data(selected_modules=[])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+
+    for module in PACKAGE_MODULES:
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=module, callback_data=f"pkg_mod_{module}")
+        ])
+
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="✅ Готово", callback_data="pkg_done")
+    ])
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="Назад", callback_data="back_to_main")
+    ])
+
+    await callback.message.edit_text(
+        "Выберите модули для пакетного тура (максимум 3):",
+        reply_markup=kb
+    )
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("pkg_mod_"))
+async def toggle_package_module(callback: types.CallbackQuery, state: FSMContext):
+    module = callback.data.replace("pkg_mod_", "")
+
+    data = await state.get_data()
+    selected = data.get("selected_modules", [])
+
+    if module in selected:
+        selected.remove(module)
+    else:
+        if len(selected) >= 3:
+            await callback.answer("Можно выбрать максимум 3 модуля", show_alert=True)
+            return
+        selected.append(module)
+
+    await state.update_data(selected_modules=selected)
+
+    text = (
+        f"Выбрано: {', '.join(selected) if selected else 'ничего'}\n\n"
+        "Выберите модули (максимум 3):"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+
+    for mod in PACKAGE_MODULES:
+        prefix = "✅ " if mod in selected else ""
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=prefix + mod, callback_data=f"pkg_mod_{mod}")
+        ])
+
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="✅ Готово", callback_data="pkg_done")
+    ])
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="Отмена", callback_data="back_to_main")
+    ])
+
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "pkg_done")
+async def package_done(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected = data.get("selected_modules", [])
+
+    if not selected:
+        await callback.answer("Выберите хотя бы один модуль", show_alert=True)
+        return
+
+    await callback.message.edit_text("Укажите количество человек:")
+    await state.set_state(PackageForm.num_people)
+    await callback.answer()
+
+
+# ─── КОЛИЧЕСТВО ЧЕЛОВЕК ──────────────────────────────────────────────────────
+
+@dp.message(PackageForm.num_people)
+async def process_num_people(message: types.Message, state: FSMContext):
+    try:
+        num = int(message.text.strip())
+        if num <= 0 or num > 100:
+            raise ValueError
+    except ValueError:
+        await message.answer("Введите корректное число (например: 10)")
+        return
+
+    await state.update_data(num_people=num)
+    await message.answer("Введите ваше имя:")
+    await state.set_state(PackageForm.name)
+
+
+# ─── ИМЯ ──────────────────────────────────────────────────────────────────────
+
+@dp.message(PackageForm.name)
+async def process_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text.strip())
+    await message.answer("Введите номер телефона:")
+    await state.set_state(PackageForm.phone)
+
+
+# ─── ТЕЛЕФОН ──────────────────────────────────────────────────────────────────
+
+@dp.message(PackageForm.phone)
+async def process_phone(message: types.Message, state: FSMContext):
+    phone = message.text.strip()
+
+    if not re.fullmatch(r"\+?\d{10,15}", phone):
+        await message.answer("Введите корректный номер телефона (только цифры, можно с +)")
+        return
+
+    await state.update_data(phone=phone)
+    await message.answer("Введите желаемую дату (например: 25.03.2026):")
+    await state.set_state(PackageForm.date)
+
+
+# ─── ДАТА + РАСЧЁТ СТОИМОСТИ ─────────────────────────────────────────────────
+
+@dp.message(PackageForm.date)
+async def process_date(message: types.Message, state: FSMContext):
+    date = message.text.strip()
+    await state.update_data(date=date)
+
+    data = await state.get_data()
+    selected = data["selected_modules"]
+    num_people = data["num_people"]
+
+    modules_count = len(selected)
+    total_per_person = 0
+
+    for module in selected:
+        prices = PACKAGE_MODULES[module]["prices"]
+        price = prices[modules_count - 1]
+        total_per_person += price
+
+    total_sum = total_per_person * num_people
+
+    await state.update_data(
+        total_per_person=total_per_person,
+        total_sum=total_sum
+    )
+
+    confirm_text = (
+        "✨ <b>Проверьте данные заявки:</b>\n\n"
+        f"📦 Модули: {', '.join(selected)}\n"
+        f"👥 Количество человек: {num_people}\n"
+        f"💰 Стоимость на 1 человека: {total_per_person} ₽\n"
+        f"💳 Общая сумма: <b>{total_sum} ₽</b>\n\n"
+        f"👤 Имя: {data['name']}\n"
+        f"📞 Телефон: {data['phone']}\n"
+        f"📅 Дата: {date}\n\n"
+        "Подтвердить заявку?"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="pkg_confirm")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="back_to_main")]
+    ])
+
+    await message.answer(confirm_text, reply_markup=kb, parse_mode="HTML")
+    await state.set_state(PackageForm.confirm)
+
+
+# ─── ПОДТВЕРЖДЕНИЕ ───────────────────────────────────────────────────────────
+
+@dp.callback_query(lambda c: c.data == "pkg_confirm")
+async def confirm_package(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+
+    admin_text = (
+        "📦 <b>Новая заявка на пакетный тур</b>\n\n"
+        f"Модули: {', '.join(data['selected_modules'])}\n"
+        f"Количество человек: {data['num_people']}\n"
+        f"Стоимость на человека: {data['total_per_person']} ₽\n"
+        f"Общая сумма: {data['total_sum']} ₽\n\n"
+        f"Имя: {data['name']}\n"
+        f"Телефон: {data['phone']}\n"
+        f"Дата: {data['date']}"
+    )
+
+    await bot.send_message(ADMIN_ID, admin_text, parse_mode="HTML")
+
+    await callback.message.edit_text(
+        "✅ <b>Заявка успешно отправлена!</b>\n\n"
+        "Наш администратор свяжется с вами в ближайшее время.",
+        parse_mode="HTML",
+        reply_markup=get_main_inline_keyboard()
+    )
+
+    await state.clear()
+    await callback.answer()
 # ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
 MASTERCLASSES = {
     "Газопровод д.4": [
@@ -528,3 +731,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
