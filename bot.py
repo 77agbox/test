@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, StateFilter
@@ -81,7 +82,29 @@ ADDRESSES_CLUBS = ["scherbinka", "annino", "gazoprovod", "molodoy_tekhnik", "onl
 
 class ClubsForm(StatesGroup):
     address = State()
-    age = State()
+    min_age = State()   # новое состояние — минимальный возраст
+
+def parse_min_age(age_str):
+    """Извлекает минимальный возраст из строки вида '5-18', '7+', '18-70' и т.д."""
+    if not age_str or not isinstance(age_str, str):
+        return None
+    age_str = age_str.strip().lower()
+    if "18+" in age_str or "18 +" in age_str:
+        return 18
+    # Ищем первое число в начале строки или после "с "
+    match = re.search(r'(?:с\s+)?(\d+)', age_str)
+    if match:
+        try:
+            return int(match.group(1))
+        except ValueError:
+            pass
+    # Если тире — берём левую часть
+    if '-' in age_str:
+        try:
+            return int(age_str.split('-')[0].strip())
+        except ValueError:
+            pass
+    return None
 
 def load_clubs_data(file_path="joined_clubs.xlsx"):
     if not os.path.exists(file_path):
@@ -102,9 +125,8 @@ def load_clubs_data(file_path="joined_clubs.xlsx"):
             record = {}
             for h, v in zip(headers, row):
                 if h == "Возраст":
-                    # Принудительно приводим к строке и очищаем
                     if isinstance(v, datetime):
-                        logging.warning(f"В столбце 'Возраст' найдена дата: {v} — заменяем на пустую строку")
+                        logging.warning(f"Дата в столбце 'Возраст': {v} → заменено на пустую строку")
                         v = ""
                     elif v is not None:
                         v = str(v).strip()
@@ -154,13 +176,30 @@ def get_clubs_addresses_inline_keyboard():
     kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
     return kb
 
-def get_ages_inline_keyboard(available_ages):
+def get_min_age_keyboard(filtered_clubs):
+    min_ages = set()
+    has_adult = False
+
+    for club in filtered_clubs:
+        age_str = club.get("Возраст", "")
+        if not age_str:
+            continue
+        min_age = parse_min_age(age_str)
+        if min_age is not None:
+            min_ages.add(min_age)
+        if "18" in str(age_str):
+            has_adult = True
+
+    if has_adult:
+        min_ages.add(18)
+
+    sorted_min = sorted(min_ages)
+
     kb = InlineKeyboardMarkup(inline_keyboard=[])
-    # Только строки — никаких дат
-    safe_ages = [str(a).strip() for a in available_ages if a and str(a).strip()]
-    for age_range in sorted(set(safe_ages)):
+    for min_age in sorted_min:
+        text = f"С {min_age} лет" if min_age < 18 else "18+"
         kb.inline_keyboard.append([
-            InlineKeyboardButton(text=age_range, callback_data=f"club_age_{age_range}")
+            InlineKeyboardButton(text=text, callback_data=f"club_minage_{min_age}")
         ])
     kb.inline_keyboard.append([
         InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_addresses")
@@ -171,13 +210,13 @@ def get_clubs_list_inline_keyboard(clubs):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     for club in clubs:
         title = club.get("Наименование детского объединения", "Без названия")
-        cb_part = title.replace(" ", "_")[:50]
+        cb_part = title.replace(" ", "_").replace("(", "").replace(")", "")[:50]
         display_text = title[:55] + "…" if len(title) > 55 else title
         kb.inline_keyboard.append([
             InlineKeyboardButton(text=display_text, callback_data=f"club_select_{cb_part}")
         ])
     kb.inline_keyboard.append([
-        InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_ages")
+        InlineKeyboardButton(text="Назад", callback_data="back_to_min_age")
     ])
     return kb
 
@@ -247,54 +286,55 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
             return
         filtered = [c for c in CLUBS_DATA if c.get("Адрес предоставления услуги") == full_addr]
 
-    # Защита: только строки
-    ages = []
-    for c in filtered:
-        age = c.get("Возраст")
-        if age and isinstance(age, str) and age.strip():
-            ages.append(age.strip())
-        else:
-            ages.append("Не указан")
-
-    unique_ages = sorted(set(ages))
-
-    if not unique_ages or unique_ages == ["Не указан"]:
+    if not filtered:
         await callback.message.edit_text(
-            f"По адресу «{addr_key}» пока нет кружков с указанным возрастом.",
+            f"По адресу «{addr_key}» пока нет кружков.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Назад", callback_data="back_to_main")
             ]])
         )
-    else:
-        await state.update_data(available_clubs=filtered)
-        await state.set_state(ClubsForm.age)
-        await callback.message.edit_text(
-            "Выберите возрастную категорию:",
-            reply_markup=get_ages_inline_keyboard(unique_ages)
-        )
+        await callback.answer()
+        return
 
+    await state.update_data(available_clubs=filtered)
+    await callback.message.edit_text(
+        "Выберите минимальный возраст ребёнка:",
+        reply_markup=get_min_age_keyboard(filtered)
+    )
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data.startswith("club_age_"))
-async def process_club_age(callback: types.CallbackQuery, state: FSMContext):
-    logging.info(f"Выбран возраст: {callback.data}")
-    age_range = callback.data.replace("club_age_", "")
-    await state.update_data(club_age=age_range)
+@dp.callback_query(lambda c: c.data.startswith("club_minage_"))
+async def process_min_age(callback: types.CallbackQuery, state: FSMContext):
+    logging.info(f"Выбран минимальный возраст: {callback.data}")
+    min_age_str = callback.data.replace("club_minage_", "")
+    try:
+        min_age = int(min_age_str)
+    except ValueError:
+        min_age = 18
+
+    await state.update_data(min_age=min_age)
 
     data = await state.get_data()
     all_clubs = data.get("available_clubs", [])
-    filtered_clubs = [c for c in all_clubs if str(c.get("Возраст", "")).strip() == age_range]
+
+    filtered_clubs = []
+    for club in all_clubs:
+        age_str = club.get("Возраст", "")
+        club_min = parse_min_age(age_str)
+        # Показываем, если минимальный возраст кружка <= выбранного
+        if club_min is None or club_min <= min_age:
+            filtered_clubs.append(club)
 
     if not filtered_clubs:
         await callback.message.edit_text(
-            f"По возрасту «{age_range}» кружков нет.",
+            f"Для возраста от {min_age} лет подходящих кружков нет.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="Назад к возрастам", callback_data="back_to_clubs_ages")
+                InlineKeyboardButton(text="Назад к адресам", callback_data="back_to_clubs_addresses")
             ]])
         )
     else:
         await callback.message.edit_text(
-            f"Найдено кружков: {len(filtered_clubs)}\n\nВыберите:",
+            f"Найдено подходящих кружков: {len(filtered_clubs)}\n\nВыберите:",
             reply_markup=get_clubs_list_inline_keyboard(filtered_clubs)
         )
 
@@ -307,11 +347,11 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
 
     data = await state.get_data()
     clubs = data.get("available_clubs", [])
-    age = data.get("club_age")
+    min_age = data.get("min_age", 0)
 
     matching = [
         c for c in clubs
-        if str(c.get("Возраст", "")).strip() == age
+        if parse_min_age(str(c.get("Возраст", ""))) is None or parse_min_age(str(c.get("Возраст", ""))) <= min_age
         and title_part in str(c.get("Наименование детского объединения", "")).replace(" ", "_")
     ]
 
@@ -327,14 +367,14 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
             f"Подробнее: {club.get('Ссылка', 'ссылка отсутствует')}"
         )
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Назад к списку", callback_data="back_to_clubs_ages")],
+            [InlineKeyboardButton(text="Назад к списку", callback_data="back_to_min_age")],
             [InlineKeyboardButton(text="В меню", callback_data="back_to_main")]
         ])
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML", disable_web_page_preview=True)
 
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data in ["back_to_main", "back_to_clubs_addresses", "back_to_clubs_ages"])
+@dp.callback_query(lambda c: c.data in ["back_to_main", "back_to_clubs_addresses", "back_to_min_age"])
 async def clubs_back(callback: types.CallbackQuery, state: FSMContext):
     logging.info(f"Нажата кнопка назад: {callback.data}")
     if callback.data == "back_to_main":
@@ -343,13 +383,12 @@ async def clubs_back(callback: types.CallbackQuery, state: FSMContext):
     elif callback.data == "back_to_clubs_addresses":
         await state.set_state(ClubsForm.address)
         await callback.message.edit_text("Выберите адрес:", reply_markup=get_clubs_addresses_inline_keyboard())
-    elif callback.data == "back_to_clubs_ages":
+    elif callback.data == "back_to_min_age":
         d = await state.get_data()
         clubs = d.get("available_clubs", [])
-        ages = [str(c.get("Возраст", "Не указан")).strip() for c in clubs if c.get("Возраст")]
         await callback.message.edit_text(
-            "Выберите возраст:",
-            reply_markup=get_ages_inline_keyboard(sorted(set(ages)))
+            "Выберите минимальный возраст ребёнка:",
+            reply_markup=get_min_age_keyboard(clubs)
         )
     await callback.answer()
 
