@@ -35,8 +35,8 @@ PACKAGE_MODULES = {
 }
 
 class PackageForm(StatesGroup):
+    selected_modules = State()  # список выбранных модулей
     num_people = State()
-    activities = State()
     name = State()
     phone = State()
     date = State()
@@ -250,12 +250,68 @@ async def forward_support(message: types.Message, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "main_package")
 async def start_package(callback: types.CallbackQuery, state: FSMContext):
     logging.info("Открыта ветка Пакетные туры")
-    text = "Выберите модули для пакетного тура:\n\n"
+    await state.set_state(PackageForm.selected_modules)
+    await state.update_data(selected_modules=[])
+    
+    text = "Выберите модули для пакетного тура (максимум 3):\n\n"
     kb = InlineKeyboardMarkup(inline_keyboard=[])
+    
     for module in PACKAGE_MODULES:
         kb.inline_keyboard.append([InlineKeyboardButton(text=module, callback_data=f"pkg_mod_{module}")])
+    
+    kb.inline_keyboard.append([InlineKeyboardButton(text="✅ Готово", callback_data="pkg_done")])
     kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
+    
     await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("pkg_mod_"))
+async def toggle_package_module(callback: types.CallbackQuery, state: FSMContext):
+    module = callback.data.replace("pkg_mod_", "")
+    
+    data = await state.get_data()
+    selected = data.get("selected_modules", [])
+    
+    if module in selected:
+        selected.remove(module)
+    else:
+        if len(selected) >= 3:
+            await callback.answer("Максимум 3 модуля!", show_alert=True)
+            return
+        selected.append(module)
+    
+    await state.update_data(selected_modules=selected)
+    
+    # Обновляем сообщение с галочками
+    text = f"Выбрано: {', '.join(selected) if selected else 'ничего'}\n\n" \
+           f"Выберите модули для пакетного тура (максимум 3):"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for mod in PACKAGE_MODULES:
+        prefix = "✅ " if mod in selected else ""
+        kb.inline_keyboard.append([InlineKeyboardButton(text=prefix + mod, callback_data=f"pkg_mod_{mod}")])
+    
+    kb.inline_keyboard.append([InlineKeyboardButton(text="✅ Готово", callback_data="pkg_done")])
+    kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
+    
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "pkg_done")
+async def package_done(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected = data.get("selected_modules", [])
+    
+    if not selected:
+        await callback.answer("Выберите хотя бы один модуль!", show_alert=True)
+        return
+    
+    await state.update_data(selected_modules=selected)
+    await callback.message.edit_text(
+        f"Вы выбрали: {', '.join(selected)}\n\n"
+        "Укажите количество человек:"
+    )
+    await state.set_state(PackageForm.num_people)
     await callback.answer()
 
 # ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
@@ -399,7 +455,7 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     if not final_clubs:
         await callback.message.edit_text("По этому направлению нет кружков.")
     else:
-        await state.update_data(current_list=final_clubs)  # Сохраняем список
+        await state.update_data(current_list=final_clubs)
         await callback.message.edit_text(
             f"Найдено кружков по направлению '{selected_dir}': {len(final_clubs)}\n\nВыберите:",
             reply_markup=get_clubs_list_inline_keyboard(final_clubs)
