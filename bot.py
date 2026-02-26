@@ -4,11 +4,11 @@ import os
 import re
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart, StateFilter, Text
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 import openpyxl
 
@@ -43,9 +43,9 @@ DISPLAY_NAMES = {
 ADDRESSES_CLUBS = ["scherbinka", "annino", "gazoprovod", "molodoy_tekhnik", "online"]
 
 class ClubsForm(StatesGroup):
-    address = State()      # выбранный адрес
-    age = State()          # возраст (число)
-    direction = State()    # выбранное направление
+    address = State()
+    age = State()
+    direction = State()
 
 def parse_min_age(age_str):
     if not age_str or not isinstance(age_str, str):
@@ -86,6 +86,7 @@ def load_clubs_data(file_path="joined_clubs.xlsx"):
             for h, v in zip(headers, row):
                 if h == "Возраст":
                     if isinstance(v, datetime):
+                        logging.warning(f"Дата в 'Возраст': {v} → заменено на ''")
                         v = ""
                     elif v is not None:
                         v = str(v).strip()
@@ -252,13 +253,13 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
 
 @dp.message(ClubsForm.age)
 async def process_age(message: types.Message, state: FSMContext):
+    text = message.text.strip()
     try:
-        age = int(message.text.strip())
+        age = int(text)
         if age < 0 or age > 120:
-            await message.answer("Возраст должен быть от 0 до 120 лет. Попробуйте снова.")
-            return
+            raise ValueError
     except ValueError:
-        await message.answer("Пожалуйста, введите число (возраст). Например: 7")
+        await message.answer("Пожалуйста, введите целое число (возраст). Например: 7")
         return
 
     await state.update_data(age=age)
@@ -343,7 +344,7 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
         return
 
     data = await state.get_data()
-    clubs = data.get("filtered_by_age", [])  # можно уточнить, если фильтр по направлению
+    clubs = data.get("filtered_by_age", [])  # или уточнить по направлению
     if idx >= len(clubs):
         await callback.message.edit_text("Кружок не найден.")
         await callback.answer()
