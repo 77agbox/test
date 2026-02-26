@@ -46,6 +46,7 @@ class ClubsForm(StatesGroup):
     address = State()
     age = State()
     direction = State()
+    current_list = State()  # сохраняем текущий список кружков
 
 def parse_age_range(age_str):
     if not age_str or not isinstance(age_str, str):
@@ -166,14 +167,11 @@ def get_direction_keyboard(filtered_clubs):
 
 def get_clubs_list_inline_keyboard(clubs):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for club in clubs:
+    for idx, club in enumerate(clubs):
         title = club.get("Наименование детского объединения", "Без названия")
-        # Уникальный ID — очищенные первые 50 символов названия + педагог (если есть)
-        unique_part = title + " " + club.get("Педагог", "")
-        safe_id = re.sub(r'[^a-zA-Z0-9_]', '_', unique_part.strip())[:50]
         display_text = title[:40] + "…" if len(title) > 40 else title
         kb.inline_keyboard.append([
-            InlineKeyboardButton(text=display_text, callback_data=f"club_sel_{safe_id}")
+            InlineKeyboardButton(text=display_text, callback_data=f"club_sel_{idx}")
         ])
     kb.inline_keyboard.append([
         InlineKeyboardButton(text="Назад", callback_data="back_to_directions")
@@ -340,6 +338,8 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     if not final_clubs:
         await callback.message.edit_text("По этому направлению нет кружков.")
     else:
+        # Сохраняем именно этот список для выбора кружка
+        await state.update_data(current_list=final_clubs)
         await callback.message.edit_text(
             f"Найдено кружков по направлению '{selected_dir}': {len(final_clubs)}\n\nВыберите:",
             reply_markup=get_clubs_list_inline_keyboard(final_clubs)
@@ -350,34 +350,29 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("club_sel_"))
 async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
     logging.info(f"Выбран кружок: {callback.data}")
-    safe_id = callback.data.replace("club_sel_", "")
-
-    data = await state.get_data()
-    clubs = data.get("filtered_by_age", [])
-    
-    # Ищем кружок по safe_id
-    matching = None
-    for club in clubs:
-        title = club.get("Наименование детского объединения", "")
-        ped = club.get("Педагог", "")
-        unique_part = (title + " " + ped).strip()
-        clean_id = re.sub(r'[^a-zA-Z0-9_]', '_', unique_part)[:50]
-        if clean_id == safe_id:
-            matching = club
-            break
-
-    if not matching:
-        await callback.message.edit_text("Кружок не найден. Попробуйте выбрать заново.")
+    idx_str = callback.data.replace("club_sel_", "")
+    try:
+        idx = int(idx_str)
+    except ValueError:
+        await callback.message.edit_text("Ошибка выбора.")
         await callback.answer()
         return
 
+    data = await state.get_data()
+    clubs = data.get("current_list", [])  # берём именно сохранённый список после фильтра
+    if idx >= len(clubs):
+        await callback.message.edit_text("Кружок не найден.")
+        await callback.answer()
+        return
+
+    club = clubs[idx]
     text = (
-        f"<b>{matching.get('Наименование детского объединения', '—')}</b>\n\n"
-        f"Направление: {matching.get('Наименование третьего уровня РБНДО', '—')}\n"
-        f"Возраст: {matching.get('Возраст', '—')}\n"
-        f"Адрес: {matching.get('Адрес предоставления услуги', 'Онлайн')}\n"
-        f"Педагог: {matching.get('Педагог', 'не указан')}\n\n"
-        f"Подробнее: {matching.get('Ссылка', 'ссылка отсутствует')}"
+        f"<b>{club.get('Наименование детского объединения', '—')}</b>\n\n"
+        f"Направление: {club.get('Наименование третьего уровня РБНДО', '—')}\n"
+        f"Возраст: {club.get('Возраст', '—')}\n"
+        f"Адрес: {club.get('Адрес предоставления услуги', 'Онлайн')}\n"
+        f"Педагог: {club.get('Педагог', 'не указан')}\n\n"
+        f"Подробнее: {club.get('Ссылка', 'ссылка отсутствует')}"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Назад к списку", callback_data="back_to_directions")],
