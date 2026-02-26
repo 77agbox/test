@@ -168,8 +168,9 @@ def get_clubs_list_inline_keyboard(clubs):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     for club in clubs:
         title = club.get("Наименование детского объединения", "Без названия")
-        # Уникальный ID — очищенные первые 30 символов названия
-        safe_id = re.sub(r'[^a-zA-Z0-9_]', '_', title)[:30]
+        # Уникальный ID — очищенные первые 50 символов названия + педагог (если есть)
+        unique_part = title + " " + club.get("Педагог", "")
+        safe_id = re.sub(r'[^a-zA-Z0-9_]', '_', unique_part.strip())[:50]
         display_text = title[:40] + "…" if len(title) > 40 else title
         kb.inline_keyboard.append([
             InlineKeyboardButton(text=display_text, callback_data=f"club_sel_{safe_id}")
@@ -354,12 +355,14 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     clubs = data.get("filtered_by_age", [])
     
-    # Ищем кружок по safe_id (очищенные первые 30 символов названия)
+    # Ищем кружок по safe_id
     matching = None
     for club in clubs:
         title = club.get("Наименование детского объединения", "")
-        clean_title = re.sub(r'[^a-zA-Z0-9_]', '_', title)[:30]
-        if clean_title == safe_id:
+        ped = club.get("Педагог", "")
+        unique_part = (title + " " + ped).strip()
+        clean_id = re.sub(r'[^a-zA-Z0-9_]', '_', unique_part)[:50]
+        if clean_id == safe_id:
             matching = club
             break
 
