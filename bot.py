@@ -73,7 +73,7 @@ ADDRESSES_CLUBS = list(ADDRESS_MAP.keys()) + ["Онлайн"]
 class ClubsForm(StatesGroup):
     address = State()
     age = State()
-    club = State()  # больше не нужен direction
+    # club — не используем, т.к. выбираем сразу по названию
 
 
 def load_clubs_data(file_path="joined_clubs.xlsx"):
@@ -81,21 +81,21 @@ def load_clubs_data(file_path="joined_clubs.xlsx"):
         wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
         sheet = wb.active
 
-        headers = [cell.value for cell in sheet[1] if cell.value]
-        data = []
+        headers = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1)) if cell.value]
 
+        data = []
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            if not row or not row[0]:
+            if not row or row[0] is None:
                 continue
             record = {}
-            for header, value in zip(headers, row):
-                record[header] = value if value is not None else ""
+            for h, v in zip(headers, row):
+                record[h] = v if v is not None else ""
             data.append(record)
 
-        logging.info(f"Загружено {len(data)} записей из {file_path}")
+        logging.info(f"Загружено {len(data)} записей из файла {file_path}")
         return data
     except Exception as e:
-        logging.error(f"Ошибка чтения файла {file_path}: {e}")
+        logging.error(f"Ошибка при чтении файла {file_path}: {e}")
         return []
 
 
@@ -202,7 +202,7 @@ def get_clubs_list_inline_keyboard(clubs):
     return kb
 
 
-# ─── СТАРТ И ОБЩИЕ ХЕНДЛЕРЫ ──────────────────────────────────────────────────
+# ─── ОБЩИЕ ХЕНДЛЕРЫ ──────────────────────────────────────────────────────────
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     await message.answer(
@@ -238,7 +238,7 @@ async def forward_support(message: types.Message, state: FSMContext):
     await state.clear()
 
 
-# ─── ПАКЕТНЫЕ ТУРЫ (заглушка — добавьте свои обработчики) ─────────────────────
+# ─── ПАКЕТНЫЕ ТУРЫ (заглушка) ────────────────────────────────────────────────
 @dp.callback_query(lambda c: c.data == "main_package")
 async def start_package(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(PackageForm.num_people)
@@ -246,7 +246,7 @@ async def start_package(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ─── МАСТЕР-КЛАССЫ (заглушка — добавьте свои обработчики) ─────────────────────
+# ─── МАСТЕР-КЛАССЫ (заглушка) ────────────────────────────────────────────────
 @dp.callback_query(lambda c: c.data == "main_masterclass")
 async def start_masterclass(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(MasterclassForm.address)
