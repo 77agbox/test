@@ -1,7 +1,8 @@
 import asyncio
 import logging
+import os
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -10,8 +11,8 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 import openpyxl
 
 # ──────────────────────────────────────────────
-TOKEN = "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E"
-ADMIN_ID = 462740408  # @sergienkoalvl
+TOKEN = os.getenv("BOT_TOKEN", "8606369205:AAEc80Rdnvg8fuogozkrc3VtqbZg9zZjG1E")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "462740408"))  # @sergienkoalvl
 # ──────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO)
@@ -60,7 +61,6 @@ class MasterclassForm(StatesGroup):
     phone = State()
 
 # ─── КРУЖКИ ──────────────────────────────────────────────────────────────────
-
 ADDRESS_MAP = {
     "СП Щербинка": "город Москва, город Щербинка, Пушкинская улица, дом 3А",
     "МХС Аннино": "город Москва, Варшавское шоссе, дом 145, строение 1",
@@ -73,16 +73,15 @@ ADDRESSES_CLUBS = list(ADDRESS_MAP.keys()) + ["Онлайн"]
 class ClubsForm(StatesGroup):
     address = State()
     age = State()
-    # club — не используем, т.к. выбираем сразу по названию
-
 
 def load_clubs_data(file_path="joined_clubs.xlsx"):
+    if not os.path.exists(file_path):
+        logging.warning(f"Файл {file_path} не найден. Ветка 'Кружки' будет пустой.")
+        return []
     try:
         wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
         sheet = wb.active
-
         headers = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1)) if cell.value]
-
         data = []
         for row in sheet.iter_rows(min_row=2, values_only=True):
             if not row or row[0] is None:
@@ -91,16 +90,13 @@ def load_clubs_data(file_path="joined_clubs.xlsx"):
             for h, v in zip(headers, row):
                 record[h] = v if v is not None else ""
             data.append(record)
-
         logging.info(f"Загружено {len(data)} записей из файла {file_path}")
         return data
     except Exception as e:
         logging.error(f"Ошибка при чтении файла {file_path}: {e}")
         return []
 
-
 CLUBS_DATA = load_clubs_data()
-
 
 # ─── КЛАВИАТУРЫ ──────────────────────────────────────────────────────────────
 def get_bottom_keyboard():
@@ -110,9 +106,7 @@ def get_bottom_keyboard():
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
-
 bottom_kb = get_bottom_keyboard()
-
 
 def get_main_inline_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -120,7 +114,6 @@ def get_main_inline_keyboard():
         [InlineKeyboardButton(text="Пакетные туры", callback_data="main_package")],
         [InlineKeyboardButton(text="Мастер-классы", callback_data="main_masterclass")],
     ])
-
 
 def get_addresses_inline_keyboard():
     kb = InlineKeyboardMarkup(inline_keyboard=[])
@@ -130,7 +123,6 @@ def get_addresses_inline_keyboard():
         kb.inline_keyboard.append([InlineKeyboardButton(text=text, callback_data=f"addr_{addr}")])
     kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
     return kb
-
 
 def get_activities_keyboard(selected=None):
     selected = selected or []
@@ -142,7 +134,6 @@ def get_activities_keyboard(selected=None):
     builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
-
 def get_masterclasses_inline_keyboard(mcs):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     for mc in mcs:
@@ -151,14 +142,12 @@ def get_masterclasses_inline_keyboard(mcs):
     kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_addresses")])
     return kb
 
-
 def get_mc_actions_inline_keyboard(title):
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Подробнее", callback_data=f"mc_detail_{title}")],
         [InlineKeyboardButton(text="Записаться", callback_data=f"mc_signup_{title}")],
         [InlineKeyboardButton(text="Назад", callback_data="back_to_mcs")],
     ])
-
 
 def get_clubs_addresses_inline_keyboard():
     kb = InlineKeyboardMarkup(inline_keyboard=[])
@@ -174,7 +163,6 @@ def get_clubs_addresses_inline_keyboard():
     kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
     return kb
 
-
 def get_ages_inline_keyboard(available_ages):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     for age_range in sorted(set(available_ages)):
@@ -185,7 +173,6 @@ def get_ages_inline_keyboard(available_ages):
         InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_addresses")
     ])
     return kb
-
 
 def get_clubs_list_inline_keyboard(clubs):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
@@ -201,7 +188,6 @@ def get_clubs_list_inline_keyboard(clubs):
     ])
     return kb
 
-
 # ─── ОБЩИЕ ХЕНДЛЕРЫ ──────────────────────────────────────────────────────────
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -212,12 +198,10 @@ async def cmd_start(message: types.Message):
     )
     await message.answer("Выберите раздел:", reply_markup=get_main_inline_keyboard())
 
-
 @dp.message(lambda m: m.text == RESTART_TEXT)
 async def restart(message: types.Message, state: FSMContext):
     await state.clear()
     await cmd_start(message)
-
 
 @dp.message(lambda m: m.text == "Написать в поддержку")
 async def start_support(message: types.Message, state: FSMContext):
@@ -226,7 +210,6 @@ async def start_support(message: types.Message, state: FSMContext):
         reply_markup=ReplyKeyboardRemove()
     )
     await state.set_state("support")
-
 
 @dp.message(StateFilter("support"))
 async def forward_support(message: types.Message, state: FSMContext):
@@ -237,33 +220,34 @@ async def forward_support(message: types.Message, state: FSMContext):
     await message.answer("Сообщение отправлено. Спасибо!", reply_markup=bottom_kb)
     await state.clear()
 
-
-# ─── ПАКЕТНЫЕ ТУРЫ (заглушка) ────────────────────────────────────────────────
+# ─── ПАКЕТНЫЕ ТУРЫ (заглушка — допиши позже) ─────────────────────────────────
 @dp.callback_query(lambda c: c.data == "main_package")
 async def start_package(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(PackageForm.num_people)
     await callback.message.answer("Сколько человек в вашей группе?", reply_markup=ReplyKeyboardRemove())
     await callback.answer()
 
-
-# ─── МАСТЕР-КЛАССЫ (заглушка) ────────────────────────────────────────────────
+# ─── МАСТЕР-КЛАССЫ (заглушка — допиши позже) ─────────────────────────────────
 @dp.callback_query(lambda c: c.data == "main_masterclass")
 async def start_masterclass(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(MasterclassForm.address)
     await callback.message.answer("Выберите адрес:", reply_markup=get_addresses_inline_keyboard())
     await callback.answer()
 
-
 # ─── КРУЖКИ ──────────────────────────────────────────────────────────────────
 @dp.callback_query(lambda c: c.data == "main_clubs")
 async def start_clubs(callback: types.CallbackQuery, state: FSMContext):
+    if not CLUBS_DATA:
+        await callback.message.edit_text("Сейчас нет доступных кружков. Попробуйте позже.")
+        await callback.answer()
+        return
+
     await state.set_state(ClubsForm.address)
     await callback.message.edit_text(
         "Выберите адрес проведения занятий:",
         reply_markup=get_clubs_addresses_inline_keyboard()
     )
     await callback.answer()
-
 
 @dp.callback_query(lambda c: c.data.startswith("club_addr_"))
 async def process_club_address(callback: types.CallbackQuery, state: FSMContext):
@@ -298,7 +282,6 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
 
     await callback.answer()
 
-
 @dp.callback_query(lambda c: c.data.startswith("club_age_"))
 async def process_club_age(callback: types.CallbackQuery, state: FSMContext):
     age_range = callback.data.replace("club_age_", "")
@@ -322,7 +305,6 @@ async def process_club_age(callback: types.CallbackQuery, state: FSMContext):
         )
 
     await callback.answer()
-
 
 @dp.callback_query(lambda c: c.data.startswith("club_select_"))
 async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
@@ -369,7 +351,6 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML", disable_web_page_preview=False)
     await callback.answer()
 
-
 # ─── НАЗАД ───────────────────────────────────────────────────────────────────
 @dp.callback_query(lambda c: c.data in [
     "back_to_main",
@@ -405,7 +386,6 @@ async def clubs_back(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.answer()
 
-
 # ─── ЗАПУСК ──────────────────────────────────────────────────────────────────
 async def main():
     try:
@@ -416,7 +396,6 @@ async def main():
         logging.error(f"Ошибка при запуске: {e}")
 
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
