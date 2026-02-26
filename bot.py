@@ -1,16 +1,33 @@
 import asyncio
-from aiogram import Bot, Dispatcher, executor, types
+import os
+import logging
+from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from dotenv import load_dotenv
-import os
 
-# Загружаем переменные из .env
+# Загружаем переменные из .env (если тестируете локально)
 load_dotenv()
 
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+
 # Инициализация бота и диспетчера
-bot = Bot(token=os.getenv('BOT_TOKEN'))
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN не задан в переменных окружения!")
+
+
+ADMIN_ID = os.getenv('ADMIN_ID')
+if not ADMIN_ID:
+    raise ValueError("ADMIN_ID не задан в переменных окружения!")
+try:
+    ADMIN_ID = int(ADMIN_ID)
+except ValueError:
+    raise ValueError(f"ADMIN_ID ('{ADMIN_ID}') не является корректным числом!")
+
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # Машина состояний
@@ -54,9 +71,10 @@ async def process_age(message: types.Message, state: FSMContext):
 async def echo(message: types.Message):
     await message.answer(f"Вы написали: {message.text}")
 
-# Основная функция
+# Основная функция запуска
 async def main():
-    await executor.start_polling(dp, bot=bot, skip_updates=True)
+    logging.info("Бот запущен и начинает опрос обновлений...")
+    await dp.start_polling(bot)
 
 if __name__ == '__main__':
     asyncio.run(main())
