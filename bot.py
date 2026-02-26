@@ -24,6 +24,42 @@ dp = Dispatcher(storage=storage)
 
 RESTART_TEXT = "Начать заново"
 
+# ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
+PACKAGE_MODULES = {
+    "Картинг": {"prices": [2200, 2100, 2000]},
+    "Симрейсинг": {"prices": [1600, 1500, 1400]},
+    "Практическая стрельба": {"prices": [1600, 1500, 1400]},
+    "Лазертаг": {"prices": [1600, 1500, 1400]},
+    "Керамика": {"prices": [1600, 1500, 1400]},
+    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
+}
+
+class PackageForm(StatesGroup):
+    num_people = State()
+    activities = State()
+    name = State()
+    phone = State()
+    date = State()
+
+# ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
+MASTERCLASSES = {
+    "Газопровод д.4": [
+        {"title": "Сумочка для телефона", "date": "04.03.2026", "time": "17:00", "price": 1500, "description_link": "https://t.me/dyutsvictory/3733"},
+        {"title": "Сумочка для телефона", "date": "26.02.2026", "time": "17:00", "price": 1500, "description_link": "https://t.me/dyutsvictory/3733"},
+        {"title": "Подсвечник Ангел", "date": "25.03.2026", "time": "17:00", "price": 1200, "description_link": "https://t.me/dyutsvictory/3769"},
+    ],
+    "СП Щербинка": [],
+    "МХС Аннино": [],
+    "СП Юный техник": [],
+}
+
+class MasterclassForm(StatesGroup):
+    address = State()
+    list_view = State()
+    detail_view = State()
+    name = State()
+    phone = State()
+
 # ─── КРУЖКИ ──────────────────────────────────────────────────────────────────
 ADDRESS_MAP = {
     "scherbinka": "город Москва, город Щербинка, Пушкинская улица, дом 3А",
@@ -210,6 +246,31 @@ async def forward_support(message: types.Message, state: FSMContext):
     await message.answer("Сообщение отправлено. Спасибо!", reply_markup=bottom_kb)
     await state.clear()
 
+# ─── ПАКЕТНЫЕ ТУРЫ ───────────────────────────────────────────────────────────
+@dp.callback_query(lambda c: c.data == "main_package")
+async def start_package(callback: types.CallbackQuery, state: FSMContext):
+    logging.info("Открыта ветка Пакетные туры")
+    text = "Выберите модули для пакетного тура:\n\n"
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for module in PACKAGE_MODULES:
+        kb.inline_keyboard.append([InlineKeyboardButton(text=module, callback_data=f"pkg_mod_{module}")])
+    kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
+    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.answer()
+
+# ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
+@dp.callback_query(lambda c: c.data == "main_masterclass")
+async def start_masterclass(callback: types.CallbackQuery, state: FSMContext):
+    logging.info("Открыта ветка Мастер-классы")
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+    for addr in MASTERCLASSES:
+        count = len(MASTERCLASSES[addr])
+        text = f"{addr} ({count})" if count > 0 else addr
+        kb.inline_keyboard.append([InlineKeyboardButton(text=text, callback_data=f"mclass_addr_{addr}")])
+    kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main")])
+    await callback.message.edit_text("Выберите адрес мастер-класса:", reply_markup=kb)
+    await callback.answer()
+
 # ─── КРУЖКИ ──────────────────────────────────────────────────────────────────
 @dp.callback_query(lambda c: c.data == "main_clubs")
 async def start_clubs(callback: types.CallbackQuery, state: FSMContext):
@@ -338,8 +399,7 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     if not final_clubs:
         await callback.message.edit_text("По этому направлению нет кружков.")
     else:
-        # Сохраняем именно этот список для выбора кружка
-        await state.update_data(current_list=final_clubs)
+        await state.update_data(current_list=final_clubs)  # Сохраняем список
         await callback.message.edit_text(
             f"Найдено кружков по направлению '{selected_dir}': {len(final_clubs)}\n\nВыберите:",
             reply_markup=get_clubs_list_inline_keyboard(final_clubs)
@@ -359,7 +419,7 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
         return
 
     data = await state.get_data()
-    clubs = data.get("current_list", [])  # берём именно сохранённый список после фильтра
+    clubs = data.get("current_list", [])
     if idx >= len(clubs):
         await callback.message.edit_text("Кружок не найден.")
         await callback.answer()
