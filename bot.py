@@ -76,7 +76,6 @@ async def start_package(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("pkg_mod_"))
 async def toggle_package_module(callback: types.CallbackQuery, state: FSMContext):
     module = callback.data.replace("pkg_mod_", "")
-
     data = await state.get_data()
     selected = data.get("selected_modules", [])
 
@@ -90,10 +89,19 @@ async def toggle_package_module(callback: types.CallbackQuery, state: FSMContext
 
     await state.update_data(selected_modules=selected)
 
+    modules_count = len(selected)
+    preview = []
+
+    if modules_count:
+        for mod in selected:
+            price = PACKAGE_MODULES[mod]["prices"][modules_count - 1]
+            preview.append(f"{mod} — {price} ₽")
+
     text = (
-        f"Выбрано: {', '.join(selected) if selected else 'ничего'}\n\n"
-        "Выберите модули (максимум 3):"
+        f"Выбрано:\n" + "\n".join(preview) + "\n\n"
+        if preview else "Ничего не выбрано\n\n"
     )
+    text += "Выберите модули (максимум 3):"
 
     kb = InlineKeyboardMarkup(inline_keyboard=[])
 
@@ -114,30 +122,19 @@ async def toggle_package_module(callback: types.CallbackQuery, state: FSMContext
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data == "pkg_done")
-async def package_done(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    selected = data.get("selected_modules", [])
-
-    if not selected:
-        await callback.answer("Выберите хотя бы один модуль", show_alert=True)
-        return
-
-    await callback.message.edit_text("Укажите количество человек:")
-    await state.set_state(PackageForm.num_people)
-    await callback.answer()
-
-
 # ─── КОЛИЧЕСТВО ЧЕЛОВЕК ──────────────────────────────────────────────────────
 
 @dp.message(PackageForm.num_people)
 async def process_num_people(message: types.Message, state: FSMContext):
     try:
         num = int(message.text.strip())
-        if num <= 0 or num > 100:
+        if num < 5:
+            await message.answer("Минимальное количество человек — 5")
+            return
+        if num > 100:
             raise ValueError
     except ValueError:
-        await message.answer("Введите корректное число (например: 10)")
+        await message.answer("Введите корректное число (минимум 5 человек)")
         return
 
     await state.update_data(num_people=num)
@@ -160,8 +157,13 @@ async def process_name(message: types.Message, state: FSMContext):
 async def process_phone(message: types.Message, state: FSMContext):
     phone = message.text.strip()
 
-    if not re.fullmatch(r"\+?\d{10,15}", phone):
-        await message.answer("Введите корректный номер телефона (только цифры, можно с +)")
+    if not re.fullmatch(r"(\+7\d{10}|8\d{10}|\d{10})", phone):
+        await message.answer(
+            "Введите корректный номер:\n"
+            "+7XXXXXXXXXX\n"
+            "8XXXXXXXXXX\n"
+            "или 10 цифр"
+        )
         return
 
     await state.update_data(phone=phone)
@@ -169,7 +171,7 @@ async def process_phone(message: types.Message, state: FSMContext):
     await state.set_state(PackageForm.date)
 
 
-# ─── ДАТА + РАСЧЁТ СТОИМОСТИ ─────────────────────────────────────────────────
+# ─── ДАТА + ПОДТВЕРЖДЕНИЕ ─────────────────────────────────────────────────────
 
 @dp.message(PackageForm.date)
 async def process_date(message: types.Message, state: FSMContext):
@@ -181,12 +183,14 @@ async def process_date(message: types.Message, state: FSMContext):
     num_people = data["num_people"]
 
     modules_count = len(selected)
+
+    price_details = []
     total_per_person = 0
 
-    for module in selected:
-        prices = PACKAGE_MODULES[module]["prices"]
-        price = prices[modules_count - 1]
+    for mod in selected:
+        price = PACKAGE_MODULES[mod]["prices"][modules_count - 1]
         total_per_person += price
+        price_details.append(f"• {mod} — {price} ₽")
 
     total_sum = total_per_person * num_people
 
@@ -196,11 +200,12 @@ async def process_date(message: types.Message, state: FSMContext):
     )
 
     confirm_text = (
-        "✨ <b>Проверьте данные заявки:</b>\n\n"
-        f"📦 Модули: {', '.join(selected)}\n"
+        "✨ <b>Проверьте заявку:</b>\n\n"
+        "📦 <b>Активности:</b>\n"
+        + "\n".join(price_details) + "\n\n"
+        f"💰 Итого на 1 человека: {total_per_person} ₽\n"
         f"👥 Количество человек: {num_people}\n"
-        f"💰 Стоимость на 1 человека: {total_per_person} ₽\n"
-        f"💳 Общая сумма: <b>{total_sum} ₽</b>\n\n"
+        f"💳 <b>Общая сумма: {total_sum} ₽</b>\n\n"
         f"👤 Имя: {data['name']}\n"
         f"📞 Телефон: {data['phone']}\n"
         f"📅 Дата: {date}\n\n"
@@ -212,7 +217,7 @@ async def process_date(message: types.Message, state: FSMContext):
         [InlineKeyboardButton(text="❌ Отмена", callback_data="back_to_main")]
     ])
 
-    await message.answer(confirm_text, reply_markup=kb, parse_mode="HTML")
+    await message.answer(confirm_text, parse_mode="HTML", reply_markup=kb)
     await state.set_state(PackageForm.confirm)
 
 
@@ -221,12 +226,26 @@ async def process_date(message: types.Message, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "pkg_confirm")
 async def confirm_package(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    user = callback.from_user
+
+    if user.username:
+        profile_link = f"https://t.me/{user.username}"
+        user_info = f"<a href='{profile_link}'>{user.full_name}</a>"
+    else:
+        user_info = f"<a href='tg://user?id={user.id}'>{user.full_name}</a>"
 
     admin_text = (
         "📦 <b>Новая заявка на пакетный тур</b>\n\n"
-        f"Модули: {', '.join(data['selected_modules'])}\n"
+        "👤 Клиент: " + user_info + "\n"
+        f"Username: @{user.username if user.username else 'нет'}\n"
+        f"User ID: {user.id}\n\n"
+        "Активности:\n"
+        + "\n".join(
+            f"{mod} — {PACKAGE_MODULES[mod]['prices'][len(data['selected_modules']) - 1]} ₽"
+            for mod in data["selected_modules"]
+        ) + "\n\n"
         f"Количество человек: {data['num_people']}\n"
-        f"Стоимость на человека: {data['total_per_person']} ₽\n"
+        f"Итого на человека: {data['total_per_person']} ₽\n"
         f"Общая сумма: {data['total_sum']} ₽\n\n"
         f"Имя: {data['name']}\n"
         f"Телефон: {data['phone']}\n"
@@ -236,8 +255,8 @@ async def confirm_package(callback: types.CallbackQuery, state: FSMContext):
     await bot.send_message(ADMIN_ID, admin_text, parse_mode="HTML")
 
     await callback.message.edit_text(
-        "✅ <b>Заявка успешно отправлена!</b>\n\n"
-        "Наш администратор свяжется с вами в ближайшее время.",
+        "✅ <b>Заявка отправлена!</b>\n\n"
+        "Администратор свяжется с вами в ближайшее время.",
         parse_mode="HTML",
         reply_markup=get_main_inline_keyboard()
     )
@@ -731,4 +750,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
