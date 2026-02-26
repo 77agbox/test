@@ -235,9 +235,7 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
     if not filtered:
         await callback.message.edit_text(
             f"По адресу «{addr_key}» пока нет кружков.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="Назад", callback_data="back_to_main")
-            ]])
+            reply_markup=None  # Убрал ReplyKeyboardRemove
         )
         await callback.answer()
         return
@@ -246,7 +244,7 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
     await callback.message.edit_text(
         "Укажите возраст (сколько полных лет ребёнку)?\n\n"
         "Просто введите число, например: 8",
-        reply_markup=ReplyKeyboardRemove()
+        reply_markup=None  # Убрал ReplyKeyboardRemove, т.к. edit_text не принимает его
     )
     await state.set_state(ClubsForm.age)
     await callback.answer()
@@ -297,7 +295,7 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     try:
         dir_idx = int(dir_idx_str)
     except ValueError:
-        await callback.message.edit_text("Ошибка выбора направления.")
+        await callback.message.edit_text("Ошибка выбора направления.", reply_markup=None)
         await callback.answer()
         return
 
@@ -310,7 +308,7 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     ))
 
     if dir_idx >= len(directions):
-        await callback.message.edit_text("Направление не найдено.")
+        await callback.message.edit_text("Направление не найдено.", reply_markup=None)
         await callback.answer()
         return
 
@@ -323,7 +321,7 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     ]
 
     if not final_clubs:
-        await callback.message.edit_text("По этому направлению нет кружков.")
+        await callback.message.edit_text("По этому направлению нет кружков.", reply_markup=None)
     else:
         await callback.message.edit_text(
             f"Найдено кружков по направлению '{selected_dir}': {len(final_clubs)}\n\nВыберите:",
@@ -339,14 +337,14 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
     try:
         idx = int(idx_str)
     except ValueError:
-        await callback.message.edit_text("Ошибка выбора.")
+        await callback.message.edit_text("Ошибка выбора.", reply_markup=None)
         await callback.answer()
         return
 
     data = await state.get_data()
     clubs = data.get("filtered_by_age", [])  # можно уточнить по направлению
     if idx >= len(clubs):
-        await callback.message.edit_text("Кружок не найден.")
+        await callback.message.edit_text("Кружок не найден.", reply_markup=None)
         await callback.answer()
         return
 
