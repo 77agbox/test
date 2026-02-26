@@ -4,11 +4,11 @@ import os
 import re
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart, StateFilter
+from aiogram.filters import CommandStart, StateFilter, Text
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 import openpyxl
 
@@ -23,43 +23,6 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
 RESTART_TEXT = "Начать заново"
-
-# ─── ПАКЕТНЫЕ ТУРЫ и МАСТЕР-КЛАССЫ (оставил без изменений) ──────────────────
-PACKAGE_MODULES = {
-    "Картинг": {"prices": [2200, 2100, 2000]},
-    "Симрейсинг": {"prices": [1600, 1500, 1400]},
-    "Практическая стрельба": {"prices": [1600, 1500, 1400]},
-    "Лазертаг": {"prices": [1600, 1500, 1400]},
-    "Керамика": {"prices": [1600, 1500, 1400]},
-    "Мягкая игрушка": {"prices": [1300, 1200, 1100]},
-}
-
-class PackageForm(StatesGroup):
-    num_people = State()
-    activities = State()
-    name = State()
-    phone = State()
-    date = State()
-
-MASTERCLASSES = {
-    "Газопровод д.4": [
-        {"title": "Сумочка для телефона", "date": "04.03.2026", "time": "17:00", "price": 1500, "description_link": "https://t.me/dyutsvictory/3733"},
-        {"title": "Сумочка для телефона", "date": "26.02.2026", "time": "17:00", "price": 1500, "description_link": "https://t.me/dyutsvictory/3733"},
-        {"title": "Подсвечник Ангел", "date": "25.03.2026", "time": "17:00", "price": 1200, "description_link": "https://t.me/dyutsvictory/3769"},
-    ],
-    "СП Щербинка": [],
-    "МХС Аннино": [],
-    "СП Юный техник": [],
-}
-
-ADDRESSES = list(MASTERCLASSES.keys())
-
-class MasterclassForm(StatesGroup):
-    address = State()
-    list_view = State()
-    detail_view = State()
-    name = State()
-    phone = State()
 
 # ─── КРУЖКИ ──────────────────────────────────────────────────────────────────
 ADDRESS_MAP = {
@@ -80,9 +43,9 @@ DISPLAY_NAMES = {
 ADDRESSES_CLUBS = ["scherbinka", "annino", "gazoprovod", "molodoy_tekhnik", "online"]
 
 class ClubsForm(StatesGroup):
-    address = State()
-    direction = State()  # новое состояние — выбор направления
-    min_age = State()
+    address = State()      # выбранный адрес
+    age = State()          # возраст (число)
+    direction = State()    # выбранное направление
 
 def parse_min_age(age_str):
     if not age_str or not isinstance(age_str, str):
@@ -90,10 +53,10 @@ def parse_min_age(age_str):
     age_str = age_str.strip().lower()
     if "18+" in age_str or "18 +" in age_str:
         return 18
-    match = re.search(r'(?:с\s+)?(\d+)', age_str)
+    match = re.search(r'\d+', age_str)
     if match:
         try:
-            return int(match.group(1))
+            return int(match.group(0))
         except ValueError:
             pass
     if '-' in age_str:
@@ -123,7 +86,6 @@ def load_clubs_data(file_path="joined_clubs.xlsx"):
             for h, v in zip(headers, row):
                 if h == "Возраст":
                     if isinstance(v, datetime):
-                        logging.warning(f"Дата в 'Возраст': {v} → заменено на ''")
                         v = ""
                     elif v is not None:
                         v = str(v).strip()
@@ -180,44 +142,13 @@ def get_direction_keyboard(filtered_clubs):
         directions.add(dir_name.strip())
 
     kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for d in sorted(directions):
+    for idx, d in enumerate(sorted(directions)):
         short_d = d[:40] + "…" if len(d) > 40 else d
-        cb_part = re.sub(r'[^a-zA-Z0-9_]', '_', d)[:30]
         kb.inline_keyboard.append([
-            InlineKeyboardButton(text=short_d, callback_data=f"club_dir_{cb_part}")
+            InlineKeyboardButton(text=short_d, callback_data=f"club_dir_{idx}")
         ])
     kb.inline_keyboard.append([
         InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_addresses")
-    ])
-    return kb
-
-def get_min_age_keyboard(filtered_clubs):
-    min_ages = set()
-    has_adult = False
-
-    for club in filtered_clubs:
-        age_str = club.get("Возраст", "")
-        if not age_str:
-            continue
-        min_age = parse_min_age(age_str)
-        if min_age is not None:
-            min_ages.add(min_age)
-        if "18" in str(age_str):
-            has_adult = True
-
-    if has_adult:
-        min_ages.add(18)
-
-    sorted_min = sorted(min_ages)
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for min_age in sorted_min:
-        text = f"С {min_age} лет" if min_age < 18 else "18+"
-        kb.inline_keyboard.append([
-            InlineKeyboardButton(text=text, callback_data=f"club_min_{min_age}")
-        ])
-    kb.inline_keyboard.append([
-        InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_directions")
     ])
     return kb
 
@@ -230,7 +161,7 @@ def get_clubs_list_inline_keyboard(clubs):
             InlineKeyboardButton(text=display_text, callback_data=f"club_sel_{idx}")
         ])
     kb.inline_keyboard.append([
-        InlineKeyboardButton(text="Назад", callback_data="back_to_min_age")
+        InlineKeyboardButton(text="Назад", callback_data="back_to_directions")
     ])
     return kb
 
@@ -312,68 +243,89 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
 
     await state.update_data(available_clubs=filtered)
     await callback.message.edit_text(
-        "Выберите направление:",
-        reply_markup=get_direction_keyboard(filtered)
+        "Укажите возраст (сколько полных лет ребёнку)?\n\n"
+        "Просто введите число, например: 8",
+        reply_markup=ReplyKeyboardRemove()
     )
+    await state.set_state(ClubsForm.age)
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data.startswith("club_dir_"))
-async def process_direction(callback: types.CallbackQuery, state: FSMContext):
-    logging.info(f"Выбрано направление: {callback.data}")
-    dir_part = callback.data.replace("club_dir_", "")
+@dp.message(ClubsForm.age)
+async def process_age(message: types.Message, state: FSMContext):
+    try:
+        age = int(message.text.strip())
+        if age < 0 or age > 120:
+            await message.answer("Возраст должен быть от 0 до 120 лет. Попробуйте снова.")
+            return
+    except ValueError:
+        await message.answer("Пожалуйста, введите число (возраст). Например: 7")
+        return
+
+    await state.update_data(age=age)
 
     data = await state.get_data()
     all_clubs = data.get("available_clubs", [])
 
-    filtered_by_dir = []
+    filtered_by_age = []
     for club in all_clubs:
-        dir_name = str(club.get("Наименование третьего уровня РБНДО", "")).strip()
-        clean_dir = re.sub(r'[^a-zA-Z0-9_]', '_', dir_name)
-        if dir_part in clean_dir:
-            filtered_by_dir.append(club)
+        age_str = club.get("Возраст", "")
+        min_age = parse_min_age(age_str)
+        if min_age is None or min_age <= age:
+            filtered_by_age.append(club)
 
-    if not filtered_by_dir:
-        await callback.message.edit_text("Направление не найдено.")
-    else:
-        await state.update_data(filtered_by_dir=filtered_by_dir)
-        await callback.message.edit_text(
-            "Выберите минимальный возраст ребёнка:",
-            reply_markup=get_min_age_keyboard(filtered_by_dir)
+    if not filtered_by_age:
+        await message.answer(
+            f"Для возраста {age} лет на этом адресе подходящих кружков нет.\n"
+            "Попробуйте другой адрес или возраст.",
+            reply_markup=get_bottom_keyboard()
         )
+        await state.clear()
+        return
 
-    await callback.answer()
+    await state.update_data(filtered_by_age=filtered_by_age)
+    await message.answer(
+        "Выберите направление:",
+        reply_markup=get_direction_keyboard(filtered_by_age)
+    )
+    await state.set_state(ClubsForm.direction)
 
-@dp.callback_query(lambda c: c.data.startswith("club_min_"))
-async def process_min_age(callback: types.CallbackQuery, state: FSMContext):
-    logging.info(f"Выбран минимальный возраст: {callback.data}")
-    min_age_str = callback.data.replace("club_min_", "")
+@dp.callback_query(lambda c: c.data.startswith("club_dir_"))
+async def process_direction(callback: types.CallbackQuery, state: FSMContext):
+    logging.info(f"Выбрано направление: {callback.data}")
+    dir_idx_str = callback.data.replace("club_dir_", "")
     try:
-        min_age = int(min_age_str)
+        dir_idx = int(dir_idx_str)
     except ValueError:
-        min_age = 18
-
-    await state.update_data(min_age=min_age)
+        await callback.message.edit_text("Ошибка выбора направления.")
+        await callback.answer()
+        return
 
     data = await state.get_data()
-    filtered_clubs = data.get("filtered_by_dir", data.get("available_clubs", []))
+    filtered_by_age = data.get("filtered_by_age", [])
 
-    final_clubs = []
-    for club in filtered_clubs:
-        age_str = club.get("Возраст", "")
-        club_min = parse_min_age(age_str)
-        if club_min is None or club_min <= min_age:
-            final_clubs.append(club)
+    directions = sorted(set(
+        club.get("Наименование третьего уровня РБНДО", "Без направления").strip()
+        for club in filtered_by_age
+    ))
+
+    if dir_idx >= len(directions):
+        await callback.message.edit_text("Направление не найдено.")
+        await callback.answer()
+        return
+
+    selected_dir = directions[dir_idx]
+    await state.update_data(selected_dir=selected_dir)
+
+    final_clubs = [
+        club for club in filtered_by_age
+        if club.get("Наименование третьего уровня РБНДО", "").strip() == selected_dir
+    ]
 
     if not final_clubs:
-        await callback.message.edit_text(
-            f"Для возраста от {min_age} лет подходящих кружков нет.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="Назад к направлениям", callback_data="back_to_clubs_directions")
-            ]])
-        )
+        await callback.message.edit_text("По этому направлению нет кружков.")
     else:
         await callback.message.edit_text(
-            f"Найдено подходящих кружков: {len(final_clubs)}\n\nВыберите:",
+            f"Найдено кружков по направлению '{selected_dir}': {len(final_clubs)}\n\nВыберите:",
             reply_markup=get_clubs_list_inline_keyboard(final_clubs)
         )
 
@@ -382,16 +334,16 @@ async def process_min_age(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("club_sel_"))
 async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
     logging.info(f"Выбран кружок: {callback.data}")
-    index_str = callback.data.replace("club_sel_", "")
+    idx_str = callback.data.replace("club_sel_", "")
     try:
-        idx = int(index_str)
+        idx = int(idx_str)
     except ValueError:
-        await callback.message.edit_text("Ошибка выбора. Попробуйте заново.")
+        await callback.message.edit_text("Ошибка выбора.")
         await callback.answer()
         return
 
     data = await state.get_data()
-    clubs = data.get("filtered_by_dir", data.get("available_clubs", []))
+    clubs = data.get("filtered_by_age", [])  # можно уточнить, если фильтр по направлению
     if idx >= len(clubs):
         await callback.message.edit_text("Кружок не найден.")
         await callback.answer()
@@ -407,13 +359,13 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
         f"Подробнее: {club.get('Ссылка', 'ссылка отсутствует')}"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Назад к списку", callback_data="back_to_min_age")],
+        [InlineKeyboardButton(text="Назад к списку", callback_data="back_to_directions")],
         [InlineKeyboardButton(text="В меню", callback_data="back_to_main")]
     ])
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML", disable_web_page_preview=True)
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data in ["back_to_main", "back_to_clubs_addresses", "back_to_min_age"])
+@dp.callback_query(lambda c: c.data in ["back_to_main", "back_to_clubs_addresses", "back_to_directions"])
 async def clubs_back(callback: types.CallbackQuery, state: FSMContext):
     logging.info(f"Нажата кнопка назад: {callback.data}")
     if callback.data == "back_to_main":
@@ -422,12 +374,12 @@ async def clubs_back(callback: types.CallbackQuery, state: FSMContext):
     elif callback.data == "back_to_clubs_addresses":
         await state.set_state(ClubsForm.address)
         await callback.message.edit_text("Выберите адрес:", reply_markup=get_clubs_addresses_inline_keyboard())
-    elif callback.data == "back_to_min_age":
+    elif callback.data == "back_to_directions":
         d = await state.get_data()
-        clubs = d.get("filtered_by_dir", d.get("available_clubs", []))
+        clubs = d.get("filtered_by_age", [])
         await callback.message.edit_text(
-            "Выберите минимальный возраст ребёнка:",
-            reply_markup=get_min_age_keyboard(clubs)
+            "Выберите направление:",
+            reply_markup=get_direction_keyboard(clubs)
         )
     await callback.answer()
 
