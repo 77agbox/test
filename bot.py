@@ -267,9 +267,40 @@ async def process_age(message: types.Message, state: FSMContext):
 
     filtered_by_age = []
     for club in all_clubs:
-        age_str = club.get("Возраст", "")
-        min_age = parse_min_age(age_str)
-        if min_age is None or min_age <= age:
+        age_str = club.get("Возраст", "").strip()
+        if not age_str:
+            filtered_by_age.append(club)  # без возраста — показываем
+            continue
+
+        # Парсим диапазон
+        min_age = None
+        max_age = None
+
+        if "18+" in age_str:
+            min_age = 18
+            max_age = 999  # взрослые
+        elif '-' in age_str:
+            parts = age_str.split('-')
+            if len(parts) == 2:
+                try:
+                    min_age = int(parts[0].strip())
+                    max_age = int(parts[1].strip())
+                except ValueError:
+                    pass
+        else:
+            # одиночное число или "с X лет"
+            match = re.search(r'\d+', age_str)
+            if match:
+                try:
+                    min_age = int(match.group(0))
+                    max_age = 999
+                except ValueError:
+                    pass
+
+        # Проверяем, подходит ли возраст ребёнка
+        if min_age is None or max_age is None:
+            filtered_by_age.append(club)  # не удалось распарсить — показываем
+        elif min_age <= age <= max_age:
             filtered_by_age.append(club)
 
     if not filtered_by_age:
@@ -395,3 +426,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
