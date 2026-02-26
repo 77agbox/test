@@ -137,14 +137,16 @@ async def start_support(message: types.Message, state: FSMContext):
     )
     await state.set_state("support")
 
-@dp.message(StateFilter("support"))
+@dp.message()
 async def forward_support(message: types.Message, state: FSMContext):
-    await bot.send_message(
-        ADMIN_ID,  # Используем ADMIN_ID из переменных окружения
-        f"Сообщение от {message.from_user.full_name} (@{message.from_user.username or 'нет'}):\n\n{message.text}"
-    )
-    await message.answer("Сообщение отправлено. Спасибо!", reply_markup=bottom_kb)
-    await state.clear()
+    current_state = await state.get_state()
+    if current_state == "support":
+        await bot.send_message(
+            ADMIN_ID,
+            f"Сообщение от {message.from_user.full_name} (@{message.from_user.username or 'нет'}):\n\n{message.text}"
+        )
+        await message.answer("Сообщение отправлено. Спасибо!", reply_markup=bottom_kb)
+        await state.clear()
 
 # ─── ПАКЕТНЫЕ ТУРЫ (хендлер) ────────────────────────────────────────────────
 @dp.callback_query(lambda c: c.data == "main_package")
@@ -173,3 +175,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
