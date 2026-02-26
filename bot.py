@@ -264,11 +264,30 @@ async def confirm_package(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
 # ─── МАСТЕР-КЛАССЫ ───────────────────────────────────────────────────────────
+
 MASTERCLASSES = {
     "Газопровод д.4": [
-        {"title": "Сумочка для телефона", "date": "04.03.2026", "time": "17:00", "price": 1500, "description_link": "https://t.me/dyutsvictory/3733"},
-        {"title": "Сумочка для телефона", "date": "26.02.2026", "time": "17:00", "price": 1500, "description_link": "https://t.me/dyutsvictory/3733"},
-        {"title": "Подсвечник Ангел", "date": "25.03.2026", "time": "17:00", "price": 1200, "description_link": "https://t.me/dyutsvictory/3769"},
+        {
+            "title": "Сумочка для телефона",
+            "date": "04.03.2026",
+            "time": "17:00",
+            "price": 1500,
+            "description_link": "https://t.me/dyutsvictory/3733"
+        },
+        {
+            "title": "Сумочка для телефона",
+            "date": "26.02.2026",
+            "time": "17:00",
+            "price": 1500,
+            "description_link": "https://t.me/dyutsvictory/3733"
+        },
+        {
+            "title": "Подсвечник Ангел",
+            "date": "25.03.2026",
+            "time": "17:00",
+            "price": 1200,
+            "description_link": "https://t.me/dyutsvictory/3769"
+        },
     ],
     "СП Щербинка": [],
     "МХС Аннино": [],
@@ -277,10 +296,159 @@ MASTERCLASSES = {
 
 class MasterclassForm(StatesGroup):
     address = State()
-    list_view = State()
-    detail_view = State()
+    selected = State()
     name = State()
     phone = State()
+
+
+# ─── ВЫБОР АДРЕСА ───────────────────────────────────────────────────────────
+
+@dp.callback_query(lambda c: c.data == "main_masterclass")
+async def start_masterclass(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+
+    for addr in MASTERCLASSES:
+        count = len(MASTERCLASSES[addr])
+        text = f"{addr} ({count})" if count else addr
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=text, callback_data=f"mclass_addr_{addr}")
+        ])
+
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="Назад", callback_data="back_to_main")
+    ])
+
+    await callback.message.edit_text(
+        "Выберите адрес мастер-класса:",
+        reply_markup=kb
+    )
+    await state.set_state(MasterclassForm.address)
+    await callback.answer()
+
+
+# ─── ОБРАБОТКА АДРЕСА ───────────────────────────────────────────────────────
+
+@dp.callback_query(lambda c: c.data.startswith("mclass_addr_"))
+async def process_mclass_address(callback: types.CallbackQuery, state: FSMContext):
+    addr = callback.data.replace("mclass_addr_", "")
+
+    classes = MASTERCLASSES.get(addr, [])
+
+    if not classes:
+        await callback.answer("По этому адресу пока нет мастер-классов", show_alert=True)
+        return
+
+    await state.update_data(address=addr, classes=classes)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[])
+
+    for i, mclass in enumerate(classes):
+        text = f"{mclass['title']} | {mclass['date']} {mclass['time']}"
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=text, callback_data=f"mclass_sel_{i}")
+        ])
+
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="Назад", callback_data="main_masterclass")
+    ])
+
+    await callback.message.edit_text(
+        f"Мастер-классы по адресу: {addr}\n\nВыберите:",
+        reply_markup=kb
+    )
+    await callback.answer()
+
+
+# ─── ВЫБОР КОНКРЕТНОГО МК ───────────────────────────────────────────────────
+
+@dp.callback_query(lambda c: c.data.startswith("mclass_sel_"))
+async def process_mclass_select(callback: types.CallbackQuery, state: FSMContext):
+    idx = int(callback.data.replace("mclass_sel_", ""))
+
+    data = await state.get_data()
+    classes = data.get("classes", [])
+
+    if idx >= len(classes):
+        await callback.answer("Ошибка выбора", show_alert=True)
+        return
+
+    selected = classes[idx]
+    await state.update_data(selected_class=selected)
+
+    text = (
+        f"✨ <b>{selected['title']}</b>\n\n"
+        f"📅 Дата: {selected['date']}\n"
+        f"⏰ Время: {selected['time']}\n"
+        f"💰 Стоимость: {selected['price']} ₽\n\n"
+        f"Подробнее: {selected['description_link']}\n\n"
+        "Введите ваше имя для записи:"
+    )
+
+    await callback.message.edit_text(text, parse_mode="HTML", disable_web_page_preview=True)
+    await state.set_state(MasterclassForm.name)
+    await callback.answer()
+
+
+# ─── ИМЯ ─────────────────────────────────────────────────────────────────────
+
+@dp.message(MasterclassForm.name)
+async def process_mclass_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text.strip())
+    await message.answer("Введите номер телефона:")
+    await state.set_state(MasterclassForm.phone)
+
+
+# ─── ТЕЛЕФОН ─────────────────────────────────────────────────────────────────
+
+@dp.message(MasterclassForm.phone)
+async def process_mclass_phone(message: types.Message, state: FSMContext):
+    phone = message.text.strip()
+
+    if not re.fullmatch(r"(\+7\d{10}|8\d{10}|\d{10})", phone):
+        await message.answer(
+            "Введите корректный номер:\n"
+            "+7XXXXXXXXXX\n"
+            "8XXXXXXXXXX\n"
+            "или 10 цифр"
+        )
+        return
+
+    await state.update_data(phone=phone)
+
+    data = await state.get_data()
+    selected = data["selected_class"]
+    user = message.from_user
+
+    if user.username:
+        profile_link = f"https://t.me/{user.username}"
+        user_info = f"<a href='{profile_link}'>{user.full_name}</a>"
+    else:
+        user_info = f"<a href='tg://user?id={user.id}'>{user.full_name}</a>"
+
+    admin_text = (
+        "🎨 <b>Новая запись на мастер-класс</b>\n\n"
+        f"Клиент: {user_info}\n"
+        f"Username: @{user.username if user.username else 'нет'}\n"
+        f"User ID: {user.id}\n\n"
+        f"Мастер-класс: {selected['title']}\n"
+        f"Дата: {selected['date']} {selected['time']}\n"
+        f"Стоимость: {selected['price']} ₽\n\n"
+        f"Имя: {data['name']}\n"
+        f"Телефон: {phone}"
+    )
+
+    await bot.send_message(ADMIN_ID, admin_text, parse_mode="HTML")
+
+    await message.answer(
+        "✅ <b>Вы успешно записаны!</b>\n\n"
+        "Администратор свяжется с вами.",
+        parse_mode="HTML",
+        reply_markup=get_main_inline_keyboard()
+    )
+
+    await state.clear()
 
 # ─── КРУЖКИ ──────────────────────────────────────────────────────────────────
 ADDRESS_MAP = {
@@ -750,5 +918,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
