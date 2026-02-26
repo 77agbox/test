@@ -101,10 +101,11 @@ def load_clubs_data(file_path="joined_clubs.xlsx"):
 
             record = {}
             for h, v in zip(headers, row):
-                # Особая обработка столбца "Возраст"
                 if h == "Возраст":
+                    # Принудительно приводим к строке и очищаем
                     if isinstance(v, datetime):
-                        v = ""  # если там дата — обнуляем, чтобы не ломать sorted
+                        logging.warning(f"В столбце 'Возраст' найдена дата: {v} — заменяем на пустую строку")
+                        v = ""
                     elif v is not None:
                         v = str(v).strip()
                     else:
@@ -155,7 +156,9 @@ def get_clubs_addresses_inline_keyboard():
 
 def get_ages_inline_keyboard(available_ages):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for age_range in sorted(set(available_ages)):
+    # Только строки — никаких дат
+    safe_ages = [str(a).strip() for a in available_ages if a and str(a).strip()]
+    for age_range in sorted(set(safe_ages)):
         kb.inline_keyboard.append([
             InlineKeyboardButton(text=age_range, callback_data=f"club_age_{age_range}")
         ])
@@ -244,12 +247,20 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
             return
         filtered = [c for c in CLUBS_DATA if c.get("Адрес предоставления услуги") == full_addr]
 
-    ages = [c.get("Возраст", "Не указан") for c in filtered if c.get("Возраст")]
+    # Защита: только строки
+    ages = []
+    for c in filtered:
+        age = c.get("Возраст")
+        if age and isinstance(age, str) and age.strip():
+            ages.append(age.strip())
+        else:
+            ages.append("Не указан")
+
     unique_ages = sorted(set(ages))
 
-    if not unique_ages:
+    if not unique_ages or unique_ages == ["Не указан"]:
         await callback.message.edit_text(
-            f"По адресу «{addr_key}» пока нет кружков.",
+            f"По адресу «{addr_key}» пока нет кружков с указанным возрастом.",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="Назад", callback_data="back_to_main")
             ]])
@@ -272,7 +283,7 @@ async def process_club_age(callback: types.CallbackQuery, state: FSMContext):
 
     data = await state.get_data()
     all_clubs = data.get("available_clubs", [])
-    filtered_clubs = [c for c in all_clubs if c.get("Возраст") == age_range]
+    filtered_clubs = [c for c in all_clubs if str(c.get("Возраст", "")).strip() == age_range]
 
     if not filtered_clubs:
         await callback.message.edit_text(
@@ -300,12 +311,12 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
 
     matching = [
         c for c in clubs
-        if c.get("Возраст") == age
+        if str(c.get("Возраст", "")).strip() == age
         and title_part in str(c.get("Наименование детского объединения", "")).replace(" ", "_")
     ]
 
     if not matching:
-        await callback.message.edit_text("Кружок не найден.")
+        await callback.message.edit_text("Кружок не найден. Попробуйте выбрать заново.")
     else:
         club = matching[0]
         text = (
@@ -319,7 +330,7 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
             [InlineKeyboardButton(text="Назад к списку", callback_data="back_to_clubs_ages")],
             [InlineKeyboardButton(text="В меню", callback_data="back_to_main")]
         ])
-        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML", disable_web_page_preview=True)
 
     await callback.answer()
 
@@ -335,7 +346,7 @@ async def clubs_back(callback: types.CallbackQuery, state: FSMContext):
     elif callback.data == "back_to_clubs_ages":
         d = await state.get_data()
         clubs = d.get("available_clubs", [])
-        ages = [c.get("Возраст", "Не указан") for c in clubs if c.get("Возраст")]
+        ages = [str(c.get("Возраст", "Не указан")).strip() for c in clubs if c.get("Возраст")]
         await callback.message.edit_text(
             "Выберите возраст:",
             reply_markup=get_ages_inline_keyboard(sorted(set(ages)))
