@@ -227,7 +227,7 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
     else:
         full_addr = ADDRESS_MAP.get(short_key)
         if not full_addr:
-            await callback.message.edit_text(f"Адрес '{addr_key}' не найден.")
+            await callback.message.edit_text(f"Адрес '{addr_key}' не найден.", reply_markup=None)
             await callback.answer()
             return
         filtered = [c for c in CLUBS_DATA if c.get("Адрес предоставления услуги") == full_addr]
@@ -235,7 +235,7 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
     if not filtered:
         await callback.message.edit_text(
             f"По адресу «{addr_key}» пока нет кружков.",
-            reply_markup=None  # Убрал ReplyKeyboardRemove
+            reply_markup=None
         )
         await callback.answer()
         return
@@ -244,7 +244,7 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
     await callback.message.edit_text(
         "Укажите возраст (сколько полных лет ребёнку)?\n\n"
         "Просто введите число, например: 8",
-        reply_markup=None  # Убрал ReplyKeyboardRemove, т.к. edit_text не принимает его
+        reply_markup=None
     )
     await state.set_state(ClubsForm.age)
     await callback.answer()
@@ -342,7 +342,7 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
         return
 
     data = await state.get_data()
-    clubs = data.get("filtered_by_age", [])  # можно уточнить по направлению
+    clubs = data.get("filtered_by_age", [])  # или уточнить по направлению
     if idx >= len(clubs):
         await callback.message.edit_text("Кружок не найден.", reply_markup=None)
         await callback.answer()
