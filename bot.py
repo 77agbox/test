@@ -47,24 +47,44 @@ class ClubsForm(StatesGroup):
     age = State()
     direction = State()
 
-def parse_min_age(age_str):
+def parse_age_range(age_str):
+    """
+    Возвращает (min_age, max_age) или (None, None)
+    Примеры:
+    "6-12" → (6, 12)
+    "18+" → (18, 999)
+    "5-8" → (5, 8)
+    "7" → (7, 999)
+    """
     if not age_str or not isinstance(age_str, str):
-        return None
+        return None, None
+    
     age_str = age_str.strip().lower()
+    
     if "18+" in age_str or "18 +" in age_str:
-        return 18
+        return 18, 999
+    
+    # Ищем диапазон X-Y
+    if '-' in age_str:
+        parts = age_str.split('-')
+        if len(parts) == 2:
+            try:
+                min_a = int(parts[0].strip())
+                max_a = int(parts[1].strip())
+                return min_a, max_a
+            except ValueError:
+                pass
+    
+    # Одиночное число или "с X лет"
     match = re.search(r'\d+', age_str)
     if match:
         try:
-            return int(match.group(0))
+            min_a = int(match.group(0))
+            return min_a, 999
         except ValueError:
             pass
-    if '-' in age_str:
-        try:
-            return int(age_str.split('-')[0].strip())
-        except ValueError:
-            pass
-    return None
+    
+    return None, None
 
 def load_clubs_data(file_path="joined_clubs.xlsx"):
     if not os.path.exists(file_path):
@@ -140,7 +160,8 @@ def get_direction_keyboard(filtered_clubs):
     directions = set()
     for club in filtered_clubs:
         dir_name = club.get("Наименование третьего уровня РБНДО", "Без направления")
-        directions.add(dir_name.strip())
+        if dir_name:
+            directions.add(dir_name.strip())
 
     kb = InlineKeyboardMarkup(inline_keyboard=[])
     for idx, d in enumerate(sorted(directions)):
@@ -227,15 +248,14 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
     else:
         full_addr = ADDRESS_MAP.get(short_key)
         if not full_addr:
-            await callback.message.edit_text(f"Адрес '{addr_key}' не найден.", reply_markup=None)
+            await callback.message.edit_text(f"Адрес '{addr_key}' не найден.")
             await callback.answer()
             return
         filtered = [c for c in CLUBS_DATA if c.get("Адрес предоставления услуги") == full_addr]
 
     if not filtered:
         await callback.message.edit_text(
-            f"По адресу «{addr_key}» пока нет кружков.",
-            reply_markup=None
+            f"По адресу «{addr_key}» пока нет кружков."
         )
         await callback.answer()
         return
@@ -243,8 +263,7 @@ async def process_club_address(callback: types.CallbackQuery, state: FSMContext)
     await state.update_data(available_clubs=filtered)
     await callback.message.edit_text(
         "Укажите возраст (сколько полных лет ребёнку)?\n\n"
-        "Просто введите число, например: 8",
-        reply_markup=None
+        "Просто введите число, например: 8"
     )
     await state.set_state(ClubsForm.age)
     await callback.answer()
@@ -268,39 +287,15 @@ async def process_age(message: types.Message, state: FSMContext):
     filtered_by_age = []
     for club in all_clubs:
         age_str = club.get("Возраст", "").strip()
-        if not age_str:
-            filtered_by_age.append(club)  # без возраста — показываем
-            continue
-
-        # Парсим диапазон
-        min_age = None
-        max_age = None
-
-        if "18+" in age_str:
-            min_age = 18
-            max_age = 999  # взрослые
-        elif '-' in age_str:
-            parts = age_str.split('-')
-            if len(parts) == 2:
-                try:
-                    min_age = int(parts[0].strip())
-                    max_age = int(parts[1].strip())
-                except ValueError:
-                    pass
-        else:
-            # одиночное число или "с X лет"
-            match = re.search(r'\d+', age_str)
-            if match:
-                try:
-                    min_age = int(match.group(0))
-                    max_age = 999
-                except ValueError:
-                    pass
-
-        # Проверяем, подходит ли возраст ребёнка
+        min_age, max_age = parse_age_range(age_str)
+        
+        # Если диапазон не распарсился — показываем (безопасно)
         if min_age is None or max_age is None:
-            filtered_by_age.append(club)  # не удалось распарсить — показываем
-        elif min_age <= age <= max_age:
+            filtered_by_age.append(club)
+            continue
+        
+        # Жёсткая проверка: возраст должен быть внутри диапазона
+        if min_age <= age <= max_age:
             filtered_by_age.append(club)
 
     if not filtered_by_age:
@@ -326,7 +321,7 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     try:
         dir_idx = int(dir_idx_str)
     except ValueError:
-        await callback.message.edit_text("Ошибка выбора направления.", reply_markup=None)
+        await callback.message.edit_text("Ошибка выбора направления.")
         await callback.answer()
         return
 
@@ -339,7 +334,7 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     ))
 
     if dir_idx >= len(directions):
-        await callback.message.edit_text("Направление не найдено.", reply_markup=None)
+        await callback.message.edit_text("Направление не найдено.")
         await callback.answer()
         return
 
@@ -352,7 +347,7 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
     ]
 
     if not final_clubs:
-        await callback.message.edit_text("По этому направлению нет кружков.", reply_markup=None)
+        await callback.message.edit_text("По этому направлению нет кружков.")
     else:
         await callback.message.edit_text(
             f"Найдено кружков по направлению '{selected_dir}': {len(final_clubs)}\n\nВыберите:",
@@ -368,14 +363,14 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
     try:
         idx = int(idx_str)
     except ValueError:
-        await callback.message.edit_text("Ошибка выбора.", reply_markup=None)
+        await callback.message.edit_text("Ошибка выбора.")
         await callback.answer()
         return
 
     data = await state.get_data()
-    clubs = data.get("filtered_by_age", [])  # или уточнить по направлению
+    clubs = data.get("filtered_by_age", [])
     if idx >= len(clubs):
-        await callback.message.edit_text("Кружок не найден.", reply_markup=None)
+        await callback.message.edit_text("Кружок не найден.")
         await callback.answer()
         return
 
@@ -426,4 +421,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
