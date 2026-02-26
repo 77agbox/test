@@ -48,14 +48,6 @@ class ClubsForm(StatesGroup):
     direction = State()
 
 def parse_age_range(age_str):
-    """
-    Возвращает (min_age, max_age) или (None, None)
-    Примеры:
-    "6-12" → (6, 12)
-    "18+" → (18, 999)
-    "5-8" → (5, 8)
-    "7" → (7, 999)
-    """
     if not age_str or not isinstance(age_str, str):
         return None, None
     
@@ -64,7 +56,6 @@ def parse_age_range(age_str):
     if "18+" in age_str or "18 +" in age_str:
         return 18, 999
     
-    # Ищем диапазон X-Y
     if '-' in age_str:
         parts = age_str.split('-')
         if len(parts) == 2:
@@ -75,7 +66,6 @@ def parse_age_range(age_str):
             except ValueError:
                 pass
     
-    # Одиночное число или "с X лет"
     match = re.search(r'\d+', age_str)
     if match:
         try:
@@ -176,11 +166,13 @@ def get_direction_keyboard(filtered_clubs):
 
 def get_clubs_list_inline_keyboard(clubs):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for idx, club in enumerate(clubs):
+    for club in clubs:
         title = club.get("Наименование детского объединения", "Без названия")
+        # Уникальный ID — очищенные первые 30 символов названия
+        safe_id = re.sub(r'[^a-zA-Z0-9_]', '_', title)[:30]
         display_text = title[:40] + "…" if len(title) > 40 else title
         kb.inline_keyboard.append([
-            InlineKeyboardButton(text=display_text, callback_data=f"club_sel_{idx}")
+            InlineKeyboardButton(text=display_text, callback_data=f"club_sel_{safe_id}")
         ])
     kb.inline_keyboard.append([
         InlineKeyboardButton(text="Назад", callback_data="back_to_directions")
@@ -289,12 +281,10 @@ async def process_age(message: types.Message, state: FSMContext):
         age_str = club.get("Возраст", "").strip()
         min_age, max_age = parse_age_range(age_str)
         
-        # Если диапазон не распарсился — показываем (безопасно)
         if min_age is None or max_age is None:
             filtered_by_age.append(club)
             continue
         
-        # Жёсткая проверка: возраст должен быть внутри диапазона
         if min_age <= age <= max_age:
             filtered_by_age.append(club)
 
@@ -359,29 +349,32 @@ async def process_direction(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("club_sel_"))
 async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
     logging.info(f"Выбран кружок: {callback.data}")
-    idx_str = callback.data.replace("club_sel_", "")
-    try:
-        idx = int(idx_str)
-    except ValueError:
-        await callback.message.edit_text("Ошибка выбора.")
-        await callback.answer()
-        return
+    safe_id = callback.data.replace("club_sel_", "")
 
     data = await state.get_data()
     clubs = data.get("filtered_by_age", [])
-    if idx >= len(clubs):
-        await callback.message.edit_text("Кружок не найден.")
+    
+    # Ищем кружок по safe_id (очищенные первые 30 символов названия)
+    matching = None
+    for club in clubs:
+        title = club.get("Наименование детского объединения", "")
+        clean_title = re.sub(r'[^a-zA-Z0-9_]', '_', title)[:30]
+        if clean_title == safe_id:
+            matching = club
+            break
+
+    if not matching:
+        await callback.message.edit_text("Кружок не найден. Попробуйте выбрать заново.")
         await callback.answer()
         return
 
-    club = clubs[idx]
     text = (
-        f"<b>{club.get('Наименование детского объединения', '—')}</b>\n\n"
-        f"Направление: {club.get('Наименование третьего уровня РБНДО', '—')}\n"
-        f"Возраст: {club.get('Возраст', '—')}\n"
-        f"Адрес: {club.get('Адрес предоставления услуги', 'Онлайн')}\n"
-        f"Педагог: {club.get('Педагог', 'не указан')}\n\n"
-        f"Подробнее: {club.get('Ссылка', 'ссылка отсутствует')}"
+        f"<b>{matching.get('Наименование детского объединения', '—')}</b>\n\n"
+        f"Направление: {matching.get('Наименование третьего уровня РБНДО', '—')}\n"
+        f"Возраст: {matching.get('Возраст', '—')}\n"
+        f"Адрес: {matching.get('Адрес предоставления услуги', 'Онлайн')}\n"
+        f"Педагог: {matching.get('Педагог', 'не указан')}\n\n"
+        f"Подробнее: {matching.get('Ссылка', 'ссылка отсутствует')}"
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Назад к списку", callback_data="back_to_directions")],
