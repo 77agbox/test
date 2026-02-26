@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from dotenv import load_dotenv
 
-# Загружаем переменные из .env (если тестируете локально)
+# Загружаем переменные из .env
 load_dotenv()
 
 # Настройка логирования
@@ -17,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не задан в переменных окружения!")
-
 
 ADMIN_ID = os.getenv('ADMIN_ID')
 if not ADMIN_ID:
@@ -50,26 +49,33 @@ async def cmd_form(message: types.Message, state: FSMContext):
     await message.answer("Введите ваше имя:")
 
 # Хэндлер для ввода имени
-@dp.message(state=Form.waiting_for_name)
+@dp.message()
 async def process_name(message: types.Message, state: FSMContext):
-    name = message.text
-    await state.update_data(name=name)
-    await state.set_state(Form.waiting_for_age)
-    await message.answer("Теперь введите ваш возраст:")
+    current_state = await state.get_state()
+    if current_state == Form.waiting_for_name.state:
+        name = message.text
+        await state.update_data(name=name)
+        await state.set_state(Form.waiting_for_age)
+        await message.answer("Теперь введите ваш возраст:")
 
 # Хэндлер для ввода возраста
-@dp.message(state=Form.waiting_for_age)
+@dp.message()
 async def process_age(message: types.Message, state: FSMContext):
-    age = message.text
-    user_data = await state.get_data()
-    name = user_data['name']
-    await message.answer(f"Спасибо! Ваши данные: имя — {name}, возраст — {age}.")
-    await state.clear()  # Очищаем состояние
+    current_state = await state.get_state()
+    if current_state == Form.waiting_for_age.state:
+        age = message.text
+        user_data = await state.get_data()
+        name = user_data['name']
+        await message.answer(f"Спасибо! Ваши данные: имя — {name}, возраст — {age}.")
+        await state.clear()  # Очищаем состояние
 
-# Хэндлер для любых текстовых сообщений
+# Хэндлер для любых других текстовых сообщений
 @dp.message()
 async def echo(message: types.Message):
-    await message.answer(f"Вы написали: {message.text}")
+    current_state = await state.get_state()
+    # Если нет активного состояния — отвечаем эхом
+    if not current_state:
+        await message.answer(f"Вы написали: {message.text}")
 
 # Основная функция запуска
 async def main():
