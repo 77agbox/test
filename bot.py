@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -86,22 +87,37 @@ def load_clubs_data(file_path="joined_clubs.xlsx"):
     if not os.path.exists(file_path):
         logging.warning(f"Файл {file_path} не найден.")
         return []
+
     try:
         wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
         sheet = wb.active
+
         headers = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1)) if cell.value]
+
         data = []
         for row in sheet.iter_rows(min_row=2, values_only=True):
             if not row or row[0] is None:
                 continue
+
             record = {}
             for h, v in zip(headers, row):
+                # Особая обработка столбца "Возраст"
+                if h == "Возраст":
+                    if isinstance(v, datetime):
+                        v = ""  # если там дата — обнуляем, чтобы не ломать sorted
+                    elif v is not None:
+                        v = str(v).strip()
+                    else:
+                        v = ""
                 record[h] = v if v is not None else ""
+
             data.append(record)
+
         logging.info(f"Загружено {len(data)} записей")
         return data
+
     except Exception as e:
-        logging.error(f"Ошибка чтения {file_path}: {e}")
+        logging.error(f"Ошибка при чтении файла {file_path}: {e}")
         return []
 
 CLUBS_DATA = load_clubs_data()
@@ -139,9 +155,13 @@ def get_clubs_addresses_inline_keyboard():
 
 def get_ages_inline_keyboard(available_ages):
     kb = InlineKeyboardMarkup(inline_keyboard=[])
-    for age in sorted(set(available_ages)):
-        kb.inline_keyboard.append([InlineKeyboardButton(text=age, callback_data=f"club_age_{age}")])
-    kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_addresses")])
+    for age_range in sorted(set(available_ages)):
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=age_range, callback_data=f"club_age_{age_range}")
+        ])
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_addresses")
+    ])
     return kb
 
 def get_clubs_list_inline_keyboard(clubs):
@@ -150,8 +170,12 @@ def get_clubs_list_inline_keyboard(clubs):
         title = club.get("Наименование детского объединения", "Без названия")
         cb_part = title.replace(" ", "_")[:50]
         display_text = title[:55] + "…" if len(title) > 55 else title
-        kb.inline_keyboard.append([InlineKeyboardButton(text=display_text, callback_data=f"club_select_{cb_part}")])
-    kb.inline_keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_ages")])
+        kb.inline_keyboard.append([
+            InlineKeyboardButton(text=display_text, callback_data=f"club_select_{cb_part}")
+        ])
+    kb.inline_keyboard.append([
+        InlineKeyboardButton(text="Назад", callback_data="back_to_clubs_ages")
+    ])
     return kb
 
 # ─── ХЕНДЛЕРЫ ────────────────────────────────────────────────────────────────
