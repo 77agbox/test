@@ -344,7 +344,7 @@ async def process_club_select(callback: types.CallbackQuery, state: FSMContext):
         return
 
     data = await state.get_data()
-    clubs = data.get("filtered_by_age", [])  # или уточнить по направлению
+    clubs = data.get("filtered_by_age", [])  # можно уточнить по направлению
     if idx >= len(clubs):
         await callback.message.edit_text("Кружок не найден.")
         await callback.answer()
