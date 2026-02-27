@@ -5,6 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from database import add_subscriber, get_subscribers, unsubscribe
 from keyboards import main_menu, admin_panel_kb, bottom_kb
 from config import ADMIN_ID
+from aiogram import Bot  # Правильный импорт Bot
 
 router = Router()
 
@@ -91,7 +92,7 @@ async def admin_panel(callback: types.CallbackQuery):
 # ================= РАССЫЛКА =================
 
 @router.callback_query(lambda c: c.data == "send_broadcast")
-async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: types.Bot):
+async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
     if callback.from_user.id == ADMIN_ID:
         text = "📣 Новая рассылка! Мы вас ждем на новом мастер-классе!"
         subscribers = get_subscribers()
