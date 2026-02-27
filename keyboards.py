@@ -43,3 +43,16 @@ def bottom_kb(is_subscribed=False, is_admin=False):
     builder.adjust(1)
 
     return builder.as_markup(resize_keyboard=True)
+
+def get_admin_panel_keyboard():
+    """
+    Клавиатура для админ-панели
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
+            [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
+            [InlineKeyboardButton(text="📢 Отправить рассылку", callback_data="send_broadcast")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
+        ]
+    )
