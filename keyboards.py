@@ -2,7 +2,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 
-# ===== Главное меню =====
+# ================= ГЛАВНОЕ МЕНЮ =================
+
 def main_menu():
     buttons = [
         ("🎓 Кружки", "m_clubs"),
@@ -18,16 +19,19 @@ def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-# ===== Нижняя клавиатура =====
+# ================= НИЖНЯЯ КЛАВИАТУРА =================
+
 def bottom_kb():
     builder = ReplyKeyboardBuilder()
     builder.button(text="🏠 Начать заново")
+    builder.button(text="✉ Написать в поддержку")
     builder.adjust(1)
 
     return builder.as_markup(resize_keyboard=True)
 
 
-# ===== Кнопка "Назад в меню" (на будущее) =====
+# ================= КНОПКА НАЗАД =================
+
 def back_to_menu_inline():
     return InlineKeyboardMarkup(
         inline_keyboard=[
