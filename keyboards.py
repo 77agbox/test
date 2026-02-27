@@ -17,7 +17,7 @@ def main_menu(is_admin=False):
     
     if is_admin:
         # Добавляем кнопку "Админ-панель", если пользователь админ
-        keyboard.add(InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel"))
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel")])
 
     return keyboard
 
