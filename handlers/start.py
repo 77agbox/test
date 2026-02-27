@@ -49,7 +49,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     # Отправляем клавиатуру с правильной кнопкой подписки или отписки
     await message.answer(
         "Пожалуйста, выберите, что вы хотите сделать.",
-        reply_markup=bottom_kb(is_subscribed=is_subscribed),  # Передаем информацию о подписке
+        reply_markup=bottom_kb(is_subscribed=is_subscribed, is_admin=(message.from_user.id == ADMIN_ID)),  # Передаем информацию о подписке
     )
 
 
@@ -183,3 +183,4 @@ async def admin_panel(callback: types.CallbackQuery):
         await callback.message.edit_text("⚙ Админ-панель", reply_markup=keyboard)
     else:
         await callback.message.answer("❌ У вас нет прав для доступа к админ-панели.")
+
