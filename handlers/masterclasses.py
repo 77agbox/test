@@ -1,45 +1,12 @@
 from aiogram import Router, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 
+from database import get_masterclasses
 from config import ADMIN_ID
-from keyboards import bottom_kb
 
 router = Router()
-
-
-# ================= ДАННЫЕ =================
-
-MASTERCLASSES = [
-    {
-        "title": "Шерстяная акварель",
-        "place": "Щербинка",
-        "description": "Создание шерстяных картин — приятный творческий процесс. Сделайте уникальное украшение для вашего интерьера.",
-        "teacher": "Лапина Светлана Юрьевна",
-        "date": "9 марта 12:00–14:00, Каб.18",
-        "price": "1 200 руб.",
-        "link": "https://t.me/dyutsvictory/3815",
-    },
-    {
-        "title": "Сумочка для телефона",
-        "place": "Щербинка",
-        "description": "Практичный аксессуар для телефона, карт и мелочей. Подходит для прогулок и отдыха.",
-        "teacher": "Кузманович Ольга Вениаминовна",
-        "date": "21 марта и 11 апреля 15:00–17:00, Каб.30",
-        "price": "800 руб.",
-        "link": "https://t.me/dyutsvictory/3816",
-    },
-    {
-        "title": "Авторская керамика",
-        "place": "Щербинка",
-        "description": "Создание уникального изделия из глины с обжигом и росписью.",
-        "teacher": "Латыпова Гульшат Габдулхаевна",
-        "date": "4 марта 17:30–19:00 и 19:00–20:30, Каб.2",
-        "price": "Дети — 2 000 руб.\nВзрослые — 2 500 руб.",
-        "link": "https://t.me/dyutsvictory/3817",
-    },
-]
 
 
 # ================= FSM =================
@@ -49,143 +16,129 @@ class MasterForm(StatesGroup):
     waiting_phone = State()
 
 
-# ================= СПИСОК =================
+# ================= ОТКРЫТЬ СПИСОК =================
 
 @router.callback_query(lambda c: c.data == "m_master")
-async def show_masterclasses(callback: types.CallbackQuery, state: FSMContext):
+async def show_masterclasses(callback: types.CallbackQuery):
+    rows = get_masterclasses()
+
+    if not rows:
+        await callback.message.edit_text("Сейчас нет доступных мастер-классов.")
+        await callback.answer()
+        return
+
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"{m['place']} — {m['title']}",
-                    callback_data=f"mc_{i}"
+                    text=row[1],  # title
+                    callback_data=f"mc_{row[0]}"  # id
                 )
             ]
-            for i, m in enumerate(MASTERCLASSES)
+            for row in rows
         ]
     )
 
     await callback.message.edit_text(
-        "🎨 <b>Мастер-классы</b>\n\nВыберите мероприятие:",
-        parse_mode="HTML",
-        reply_markup=keyboard,
+        "🎨 Доступные мастер-классы:",
+        reply_markup=keyboard
     )
 
     await callback.answer()
 
 
-# ================= КАРТОЧКА =================
+# ================= КАРТОЧКА МК =================
 
-@router.callback_query(
-    lambda c: c.data.startswith("mc_") and c.data.split("_")[1].isdigit()
-)
+@router.callback_query(lambda c: c.data.startswith("mc_"))
 async def show_mastercard(callback: types.CallbackQuery, state: FSMContext):
-    index = int(callback.data.split("_")[1])
-    mc = MASTERCLASSES[index]
+    mc_id = int(callback.data.split("_")[1])
 
-    await state.update_data(selected_mc=mc)
+    rows = get_masterclasses()
+    mc = next((row for row in rows if row[0] == mc_id), None)
+
+    if not mc:
+        await callback.answer("Не найдено")
+        return
+
+    text = (
+        f"<b>{mc[1]}</b>\n\n"
+        f"📍 {mc[2]}\n"
+        f"👩‍🏫 {mc[4]}\n"
+        f"🕒 {mc[5]}\n"
+        f"💰 {mc[6]}\n\n"
+        f"{mc[3]}\n\n"
+        f"{mc[7]}"
+    )
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📝 Записаться",
-                    callback_data="mc_signup"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔗 Подробнее",
-                    url=mc["link"]
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="⬅ Назад",
-                    callback_data="m_master"
-                )
-            ],
+            [InlineKeyboardButton(text="📝 Записаться", callback_data=f"signup_{mc_id}")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="m_master")]
         ]
-    )
-
-    text = (
-        f"<b>{mc['title']}</b>\n"
-        f"📍 {mc['place']}\n\n"
-        f"{mc['description']}\n\n"
-        f"👩‍🏫 Педагог: {mc['teacher']}\n"
-        f"📅 {mc['date']}\n\n"
-        f"💰 {mc['price']}"
     )
 
     await callback.message.edit_text(
         text,
         parse_mode="HTML",
-        reply_markup=keyboard,
         disable_web_page_preview=True,
+        reply_markup=keyboard
     )
 
     await callback.answer()
 
 
-# ================= НАЖАТИЕ "ЗАПИСАТЬСЯ" =================
+# ================= ЗАПИСЬ =================
 
-@router.callback_query(lambda c: c.data == "mc_signup")
-async def signup_master(callback: types.CallbackQuery, state: FSMContext):
+@router.callback_query(lambda c: c.data.startswith("signup_"))
+async def signup_start(callback: types.CallbackQuery, state: FSMContext):
+    mc_id = int(callback.data.split("_")[1])
+    await state.update_data(mc_id=mc_id)
+
     await state.set_state(MasterForm.waiting_name)
-    await callback.message.answer(
-        "Введите ваше имя:",
-        reply_markup=ReplyKeyboardRemove(),
-    )
+
+    await callback.message.answer("Введите ваше имя:")
     await callback.answer()
 
-
-# ================= ИМЯ =================
 
 @router.message(MasterForm.waiting_name)
-async def master_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text.strip())
+async def signup_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text)
     await state.set_state(MasterForm.waiting_phone)
-    await message.answer("Введите телефон для связи:")
+    await message.answer("Введите номер телефона:")
 
-
-# ================= ЗАВЕРШЕНИЕ =================
 
 @router.message(MasterForm.waiting_phone)
-async def master_finish(message: types.Message, state: FSMContext):
+async def signup_phone(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    mc = data["selected_mc"]
-    name = data["name"]
-    phone = message.text.strip()
+    mc_id = data["mc_id"]
 
-    username_link = (
-        f'<a href="https://t.me/{message.from_user.username}">@{message.from_user.username}</a>'
-        if message.from_user.username
-        else "без username"
+    rows = get_masterclasses()
+    mc = next((row for row in rows if row[0] == mc_id), None)
+
+    if not mc:
+        await message.answer("Ошибка.")
+        await state.clear()
+        return
+
+    text = (
+        "📥 Новая запись на мастер-класс\n\n"
+        f"Мастер-класс: {mc[1]}\n"
+        f"Дата: {mc[5]}\n"
+        f"Стоимость: {mc[6]}\n\n"
+        f"Имя: {data['name']}\n"
+        f"Телефон: {message.text}\n\n"
+        f"TG: @{message.from_user.username or 'нет'}\n"
+        f"ID: {message.from_user.id}"
     )
 
-    # === Админу ===
     await message.bot.send_message(
         ADMIN_ID,
-        f"🎨 <b>Новая запись на мастер-класс</b>\n\n"
-        f"<b>Мероприятие:</b> {mc['title']}\n"
-        f"<b>Дата:</b> {mc['date']}\n"
-        f"<b>Стоимость:</b> {mc['price']}\n\n"
-        f"<b>Клиент:</b> {name}\n"
-        f"<b>Телефон:</b> {phone}\n"
-        f"<b>Профиль:</b> {username_link}\n"
-        f"<b>TG ID:</b> {message.from_user.id}",
-        parse_mode="HTML",
-        disable_web_page_preview=True,
+        text
     )
 
-    # === Клиенту ===
     await message.answer(
-        f"✅ <b>Вы записаны!</b>\n\n"
-        f"<b>{mc['title']}</b>\n"
-        f"{mc['date']}\n\n"
-        f"С вами скоро свяжется администратор для подтверждения.",
-        parse_mode="HTML",
-        reply_markup=bottom_kb(),
+        "✅ Вы записаны!\n"
+        "Администратор свяжется с вами."
     )
 
     await state.clear()
