@@ -7,7 +7,7 @@ from keyboards import main_menu, bottom_kb
 from config import ADMIN_ID
 import asyncio
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton  # Добавляем импорты для кнопок
+from aiogram.fsm.filters import StateFilter  # Добавляем правильный импорт для StateFilter
 
 router = Router()
 
@@ -82,7 +82,7 @@ async def support_start(message: types.Message, state: FSMContext):
 
 
 # ======================= СОХРАНЕНИЕ ДАННЫХ =======================
-@router.message(StateFilter(MasterForm.waiting_name))
+@router.message(StateFilter(MasterForm.waiting_name))  # Фильтрация по состоянию "waiting_name"
 async def signup_name(message: types.Message, state: FSMContext):
     """
     Обработчик для ввода имени пользователя.
@@ -92,7 +92,7 @@ async def signup_name(message: types.Message, state: FSMContext):
     await message.answer("Введите номер телефона:")
 
 
-@router.message(StateFilter(MasterForm.waiting_phone))
+@router.message(StateFilter(MasterForm.waiting_phone))  # Фильтрация по состоянию "waiting_phone"
 async def signup_phone(message: types.Message, state: FSMContext):
     """
     Обработчик для ввода номера телефона.
