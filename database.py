@@ -118,6 +118,20 @@ def subscribe(user_id: int):
             conn.execute("UPDATE subscribers SET subscribed = 1 WHERE user_id = ?", (user_id,))
 
 
+def check_subscription(user_id):
+    """
+    Проверяет, подписан ли пользователь на рассылку.
+    Возвращает True, если подписан, и False, если нет.
+    """
+    with closing(sqlite3.connect(DB_NAME)) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT subscribed FROM subscribers WHERE user_id = ?", (user_id,))
+        result = cur.fetchone()
+        if result:
+            return result[0] == 1  # Если подписка активна (subscribed = 1), то True
+        return False  # Если нет записи или подписка не активна
+
+
 # ================= ИНИЦИАЛИЗАЦИЯ БД =================
 
 # Инициализируем базу данных при старте бота
