@@ -5,7 +5,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import BOT_TOKEN
-from handlers import start, clubs, packages, masterclasses
+
+import handlers.start as start
+import handlers.clubs as clubs
+import handlers.packages as packages
+import handlers.masterclasses as masterclasses
+
 
 logging.basicConfig(level=logging.INFO)
 
