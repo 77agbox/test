@@ -7,7 +7,7 @@ from keyboards import main_menu, bottom_kb
 from config import ADMIN_ID
 import asyncio
 from aiogram import Bot
-from aiogram.fsm.filters import StateFilter  # Добавляем правильный импорт для StateFilter
+from aiogram.fsm.state import StateFilter  # Заменить на правильный импорт
 
 router = Router()
 
@@ -186,3 +186,4 @@ async def admin_panel(callback: types.CallbackQuery):
         await callback.message.edit_text("⚙ Админ-панель", reply_markup=keyboard)
     else:
         await callback.message.answer("❌ У вас нет прав для доступа к админ-панели.")
+
