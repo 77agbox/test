@@ -1,51 +1,39 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-
-# ================= ГЛАВНОЕ МЕНЮ =================
-
-def main_menu(is_admin: bool = False):
+def main_menu(is_admin=False):
     """
-    Главное меню.
-    Если пользователь админ — добавляется кнопка админ-панели.
+    Главное меню. Если администратор, то добавляется кнопка для админ-панели.
     """
-
-    buttons = [
-        ("🎓 Кружки", "m_clubs"),
-        ("🎯 Пакетные туры", "m_package"),
-        ("🎨 Мастер-классы", "m_master"),
-    ]
-
-    keyboard = [
-        [InlineKeyboardButton(text=text, callback_data=data)]
-        for text, data in buttons
-    ]
-
-    # Если админ — добавляем кнопку админ-панели
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🎓 Кружки", callback_data="m_clubs")],
+            [InlineKeyboardButton(text="🎯 Пакетные туры", callback_data="m_package")],
+            [InlineKeyboardButton(text="🎨 Мастер-классы", callback_data="m_master")]
+        ]
+    )
+    
     if is_admin:
-        keyboard.append(
-            [InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel")]
-        )
+        keyboard.add(InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel"))
 
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+    return keyboard
 
 
-# ================= НИЖНЯЯ КЛАВИАТУРА =================
-
-def bottom_kb(is_admin: bool = False):
+def bottom_kb(is_admin=False):
     """
     Нижняя клавиатура (Reply).
     Всегда:
     - Начать заново
     - Написать в поддержку
-
-    Если админ — добавляется кнопка админ-панели.
+    - Отписаться от рассылки (если не админ)
     """
-
     builder = ReplyKeyboardBuilder()
 
     builder.button(text="🏠 Начать заново")
     builder.button(text="✉ Написать в поддержку")
+    
+    if not is_admin:
+        builder.button(text="❌ Отписаться от рассылки")
 
     if is_admin:
         builder.button(text="⚙ Админ-панель")
@@ -55,11 +43,70 @@ def bottom_kb(is_admin: bool = False):
     return builder.as_markup(resize_keyboard=True)
 
 
-# ================= КНОПКА НАЗАД =================
-
-def back_to_menu_inline():
+def get_club_addresses_inline_keyboard():
+    """
+    Клавиатура для выбора адресов.
+    """
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅ Назад в меню", callback_data="back_main")]
+            [InlineKeyboardButton(text="Газопровод, д.4", callback_data="addr_gazoprovod")],
+            [InlineKeyboardButton(text="МХС Аннино", callback_data="addr_annino")],
+            [InlineKeyboardButton(text="СП Щербинка", callback_data="addr_scherbinka")],
+            [InlineKeyboardButton(text="СП Юный техник", callback_data="addr_molodoy_tekhnik")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_to_main")]
+        ]
+    )
+
+
+def get_masterclasses_inline_keyboard():
+    """
+    Клавиатура для выбора мастер-классов.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Мастер-класс 1", callback_data="mc_select_1")],
+            [InlineKeyboardButton(text="Мастер-класс 2", callback_data="mc_select_2")],
+            [InlineKeyboardButton(text="Мастер-класс 3", callback_data="mc_select_3")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_to_main")]
+        ]
+    )
+
+
+def get_admin_panel_keyboard():
+    """
+    Клавиатура для админ-панели
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
+            [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
+            [InlineKeyboardButton(text="📢 Отправить рассылку", callback_data="send_broadcast")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
+        ]
+    )
+
+
+def get_back_to_main_keyboard():
+    """
+    Клавиатура для возврата в главное меню
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
+        ]
+    )
+
+
+def get_direction_keyboard():
+    """
+    Клавиатура для выбора направления кружков.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Керамика", callback_data="dir_keramika")],
+            [InlineKeyboardButton(text="Симрейсинг", callback_data="dir_simracing")],
+            [InlineKeyboardButton(text="Лазертаг", callback_data="dir_laser")],
+            [InlineKeyboardButton(text="Подсвечники", callback_data="dir_subs")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_to_clubs")]
         ]
     )
