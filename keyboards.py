@@ -44,10 +44,11 @@ def bottom_kb(is_subscribed=False, is_admin=False):
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True)
 
-# ======================= Клавиатура для выбора адресов =======================
+
+# ======================= Клавиатура для выбора адресов (для кружков) =======================
 def get_club_addresses_inline_keyboard():
     """
-    Клавиатура для выбора адресов (для кружков).
+    Клавиатура для выбора адресов.
     """
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -78,7 +79,7 @@ def get_masterclasses_inline_keyboard():
 # ======================= Клавиатура для админ-панели =======================
 def get_admin_panel_keyboard():
     """
-    Клавиатура для админ-панели.
+    Клавиатура для админ-панели
     """
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -116,4 +117,3 @@ def get_direction_keyboard():
             [InlineKeyboardButton(text="⬅ Назад", callback_data="back_to_clubs")]  # Кнопка "Назад"
         ]
     )
-
