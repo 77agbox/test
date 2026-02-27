@@ -2,7 +2,6 @@ from aiogram import Router, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton  # Добавляем эти импорты
 from database import add_subscriber, get_subscribers, unsubscribe, check_subscription
 from keyboards import main_menu, bottom_kb
 from config import ADMIN_ID
@@ -12,14 +11,12 @@ from aiogram import Bot
 router = Router()
 
 # ======================= FSM =======================
-
 class MasterForm(StatesGroup):
     waiting_name = State()  # Состояние для ввода имени
     waiting_phone = State()  # Состояние для ввода телефона
 
 
 # ======================= СТАРТ =======================
-
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
     """
@@ -30,8 +27,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
     # Сохраняем данные пользователя (имя и телефон)
     user_id = message.from_user.id
     name = message.from_user.first_name
-    phone = "Не указан"
+    phone = "Не указан"  # Можно изменить, если добавите сбор номера телефона
 
+    # Добавляем пользователя в базу данных
     add_subscriber(user_id, name, phone)
 
     # Проверяем, подписан ли пользователь на рассылку
@@ -54,7 +52,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 
 # ======================= НАЧАТЬ ЗАНОВО =======================
-
 @router.message(lambda m: m.text == "🏠 Начать заново")
 async def restart(message: types.Message, state: FSMContext):
     """
@@ -69,7 +66,6 @@ async def restart(message: types.Message, state: FSMContext):
 
 
 # ======================= ПОДДЕРЖКА =======================
-
 @router.message(lambda m: m.text == "✉ Написать в поддержку")
 async def support_start(message: types.Message, state: FSMContext):
     """
@@ -85,7 +81,6 @@ async def support_start(message: types.Message, state: FSMContext):
 
 
 # ======================= СОХРАНЕНИЕ ДАННЫХ =======================
-
 @router.message(MasterForm.waiting_name)
 async def signup_name(message: types.Message, state: FSMContext):
     """
@@ -115,7 +110,6 @@ async def signup_phone(message: types.Message, state: FSMContext):
 
 
 # ======================= ОТПИСАТЬСЯ ОТ РАССЫЛКИ =======================
-
 @router.message(lambda m: m.text == "❌ Отписаться от рассылки")
 async def unsubscribe_user(message: types.Message, state: FSMContext):
     """
@@ -128,11 +122,10 @@ async def unsubscribe_user(message: types.Message, state: FSMContext):
 
 
 # ======================= ПОДПИСАТЬСЯ НА РАССЫЛКУ =======================
-
 @router.message(lambda m: m.text == "📢 Подписаться на рассылку")
 async def subscribe_user(message: types.Message, state: FSMContext):
     """
-    Обработчик для кнопки "Подписаться на рассылку". Добавляем пользователя в рассылку.
+    Подписать пользователя на рассылку.
     """
     user_id = message.from_user.id
     name = message.from_user.first_name
@@ -144,28 +137,37 @@ async def subscribe_user(message: types.Message, state: FSMContext):
 
 
 # ======================= РАССЫЛКА =======================
-
 @router.callback_query(lambda c: c.data == "send_broadcast")
 async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
     """
     Обработчик для кнопки "Отправить рассылку". Отправляет сообщение всем подписчикам.
     """
     if callback.from_user.id == ADMIN_ID:  # Проверка на админа
-        text = "📣 Новая рассылка! Мы вас ждем на новом мастер-классе!"
-        subscribers = get_subscribers()  # Получаем подписчиков
-        for user_id in subscribers:
-            try:
-                await bot.send_message(user_id, text)
-                await asyncio.sleep(0.1)  # Задержка для безопасной рассылки
-            except Exception as e:
-                print(f"Ошибка при отправке сообщения {user_id}: {e}")
-        await callback.message.answer("✅ Рассылка отправлена всем подписчикам.")
+        await callback.message.answer("Введите текст рассылки:")
+        await state.set_state("waiting_for_broadcast")
     else:
         await callback.message.answer("❌ Вы не админ, рассылку можно отправлять только администратору.")
 
 
-# ======================= АДМИН-ПАНЕЛЬ =======================
+@router.message(state="waiting_for_broadcast")
+async def handle_broadcast(message: types.Message, state: FSMContext, bot: Bot):
+    """
+    Обработчик для текста рассылки.
+    """
+    text = message.text
+    subscribers = get_subscribers()
+    for user_id in subscribers:
+        try:
+            await bot.send_message(user_id, text)
+            await asyncio.sleep(0.1)  # Задержка для безопасной рассылки
+        except Exception as e:
+            print(f"Ошибка при отправке сообщения {user_id}: {e}")
+    
+    await message.answer("✅ Рассылка отправлена всем подписчикам.")
+    await state.clear()
 
+
+# ======================= АДМИН-ПАНЕЛЬ =======================
 @router.callback_query(lambda c: c.data == "admin_panel")
 async def admin_panel(callback: types.CallbackQuery):
     """
