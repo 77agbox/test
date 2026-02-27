@@ -2,17 +2,19 @@ from aiogram import Router, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-
-from config import ADMIN_ID
+from database import add_subscriber, get_subscribers, unsubscribe
 from keyboards import main_menu, bottom_kb
+from config import ADMIN_ID
+
 
 router = Router()
 
 
-# ================= FSM ПОДДЕРЖКИ =================
+# ================= FSM =================
 
-class SupportForm(StatesGroup):
-    waiting_message = State()
+class MasterForm(StatesGroup):
+    waiting_name = State()
+    waiting_phone = State()
 
 
 # ================= СТАРТ =================
@@ -21,14 +23,19 @@ class SupportForm(StatesGroup):
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
 
-    is_admin = message.from_user.id == ADMIN_ID
+    # Сохраняем данные пользователя (имя и телефон)
+    user_id = message.from_user.id
+    name = message.from_user.first_name
+    phone = "Не указан"
+
+    add_subscriber(user_id, name, phone)
 
     await message.answer(
         "👋 <b>Здравствуйте!</b>\n\n"
         "Я бот Центра «Виктория».\n\n"
         "Выберите интересующий раздел:",
         parse_mode="HTML",
-        reply_markup=main_menu(is_admin=is_admin),
+        reply_markup=main_menu(is_admin=False),
     )
 
 
@@ -38,11 +45,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def restart(message: types.Message, state: FSMContext):
     await state.clear()
 
-    is_admin = message.from_user.id == ADMIN_ID
-
     await message.answer(
         "Выберите раздел:",
-        reply_markup=main_menu(is_admin=is_admin),
+        reply_markup=main_menu(is_admin=False),
     )
 
 
@@ -50,7 +55,7 @@ async def restart(message: types.Message, state: FSMContext):
 
 @router.message(lambda m: m.text == "✉ Написать в поддержку")
 async def support_start(message: types.Message, state: FSMContext):
-    await state.set_state(SupportForm.waiting_message)
+    await state.set_state(MasterForm.waiting_message)
 
     await message.answer(
         "Опишите проблему или вопрос.\n\n"
@@ -59,7 +64,9 @@ async def support_start(message: types.Message, state: FSMContext):
     )
 
 
-@router.message(SupportForm.waiting_message)
+# ================= ОТПРАВИТЬ СООБЩЕНИЕ В ПОДДЕРЖКУ =================
+
+@router.message(MasterForm.waiting_message)
 async def support_send(message: types.Message, state: FSMContext):
     username_link = (
         f'<a href="https://t.me/{message.from_user.username}">@{message.from_user.username}</a>'
@@ -78,28 +85,51 @@ async def support_send(message: types.Message, state: FSMContext):
         disable_web_page_preview=True,
     )
 
-    is_admin = message.from_user.id == ADMIN_ID
-
     await message.answer(
         "✅ Ваше сообщение отправлено администратору.\n"
         "Мы свяжемся с вами при необходимости.",
-        reply_markup=bottom_kb(is_admin=is_admin),
+        reply_markup=bottom_kb(is_admin=False),
     )
 
     await state.clear()
 
 
-# ================= НАЗАД В МЕНЮ =================
+# ================= ОТПИСАТЬСЯ ОТ РАССЫЛКИ =================
 
-@router.callback_query(lambda c: c.data == "back_main")
-async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
+@router.message(lambda m: m.text == "❌ Отписаться от рассылки")
+async def unsubscribe_user(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    unsubscribe(user_id)
 
-    is_admin = callback.from_user.id == ADMIN_ID
+    await message.answer("❌ Вы отписались от рассылки.", reply_markup=bottom_kb(is_admin=False))
 
-    await callback.message.edit_text(
-        "Выберите раздел:",
-        reply_markup=main_menu(is_admin=is_admin),
-    )
 
-    await callback.answer()
+# ================= ПОДПИСАТЬСЯ НА РАССЫЛКУ =================
+
+@router.message(lambda m: m.text == "📢 Подписаться на рассылку")
+async def subscribe_user(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    name = message.from_user.first_name
+    phone = "Не указан"
+
+    add_subscriber(user_id, name, phone)
+
+    await message.answer("✅ Вы подписались на рассылку.", reply_markup=bottom_kb(is_admin=False))
+
+
+# ================= РАССЫЛКА =================
+
+@router.message(lambda m: m.text == "📢 Отправить рассылку")
+async def send_broadcast(message: types.Message, state: FSMContext, bot: types.Bot):
+    if message.from_user.id == ADMIN_ID:  # Проверка на админа
+        text = "📣 Новая рассылка! Мы вас ждем на новом мастер-классе!"
+        subscribers = get_subscribers()
+        for user_id in subscribers:
+            try:
+                await bot.send_message(user_id, text)
+                await asyncio.sleep(0.1)  # Задержка для безопасной рассылки
+            except Exception as e:
+                print(f"Ошибка при отправке сообщения {user_id}: {e}")
+        await message.answer("✅ Рассылка отправлена всем подписчикам.")
+    else:
+        await message.answer("❌ Вы не админ, рассылку можно отправлять только администратору.")
