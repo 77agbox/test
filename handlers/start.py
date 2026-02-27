@@ -18,3 +18,6 @@ async def start(message: types.Message):
 async def restart(message: types.Message, state):
     await state.clear()
     await start(message)
+@router.message()
+async def catch_all_messages(message: types.Message):
+    print("Необработанное сообщение:", message.text)
