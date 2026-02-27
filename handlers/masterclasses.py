@@ -9,7 +9,7 @@ from keyboards import bottom_kb
 router = Router()
 
 
-# ===== ДАННЫЕ МАСТЕР-КЛАССОВ =====
+# ================= ДАННЫЕ =================
 
 MASTERCLASSES = [
     {
@@ -42,14 +42,15 @@ MASTERCLASSES = [
 ]
 
 
-# ===== FSM =====
+# ================= FSM =================
+
 class MasterForm(StatesGroup):
-    select = State()
-    name = State()
-    phone = State()
+    waiting_name = State()
+    waiting_phone = State()
 
 
-# ===== Список мастер-классов =====
+# ================= СПИСОК =================
+
 @router.callback_query(lambda c: c.data == "m_master")
 async def show_masterclasses(callback: types.CallbackQuery, state: FSMContext):
     keyboard = InlineKeyboardMarkup(
@@ -64,17 +65,20 @@ async def show_masterclasses(callback: types.CallbackQuery, state: FSMContext):
         ]
     )
 
-    await state.set_state(MasterForm.select)
     await callback.message.edit_text(
         "🎨 <b>Мастер-классы</b>\n\nВыберите мероприятие:",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
+
     await callback.answer()
 
 
-# ===== Карточка =====
-@router.callback_query(lambda c: c.data.startswith("mc_"))
+# ================= КАРТОЧКА =================
+
+@router.callback_query(
+    lambda c: c.data.startswith("mc_") and c.data.split("_")[1].isdigit()
+)
 async def show_mastercard(callback: types.CallbackQuery, state: FSMContext):
     index = int(callback.data.split("_")[1])
     mc = MASTERCLASSES[index]
@@ -93,6 +97,12 @@ async def show_mastercard(callback: types.CallbackQuery, state: FSMContext):
                 InlineKeyboardButton(
                     text="🔗 Подробнее",
                     url=mc["link"]
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅ Назад",
+                    callback_data="m_master"
                 )
             ],
         ]
@@ -117,10 +127,11 @@ async def show_mastercard(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ===== Запись =====
+# ================= НАЖАТИЕ "ЗАПИСАТЬСЯ" =================
+
 @router.callback_query(lambda c: c.data == "mc_signup")
 async def signup_master(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(MasterForm.name)
+    await state.set_state(MasterForm.waiting_name)
     await callback.message.answer(
         "Введите ваше имя:",
         reply_markup=ReplyKeyboardRemove(),
@@ -128,14 +139,18 @@ async def signup_master(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(MasterForm.name)
+# ================= ИМЯ =================
+
+@router.message(MasterForm.waiting_name)
 async def master_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text.strip())
-    await state.set_state(MasterForm.phone)
+    await state.set_state(MasterForm.waiting_phone)
     await message.answer("Введите телефон для связи:")
 
 
-@router.message(MasterForm.phone)
+# ================= ЗАВЕРШЕНИЕ =================
+
+@router.message(MasterForm.waiting_phone)
 async def master_finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
     mc = data["selected_mc"]
@@ -148,7 +163,7 @@ async def master_finish(message: types.Message, state: FSMContext):
         else "без username"
     )
 
-    # === Сообщение админу ===
+    # === Админу ===
     await message.bot.send_message(
         ADMIN_ID,
         f"🎨 <b>Новая запись на мастер-класс</b>\n\n"
