@@ -14,11 +14,11 @@ def main_menu(is_admin=False):
     )
 
     if is_admin:
-        keyboard.insert(InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel"))
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel")])
 
     return keyboard
 
-def bottom_kb(is_subscribed=False, is_admin=False):
+def bottom_kb(is_admin=False):
     """
     Нижняя клавиатура (Reply).
     Всегда:
@@ -32,10 +32,7 @@ def bottom_kb(is_subscribed=False, is_admin=False):
     builder.button(text="✉ Написать в поддержку")
     
     if not is_admin:
-        if is_subscribed:
-            builder.button(text="❌ Отписаться от рассылки")
-        else:
-            builder.button(text="📢 Подписаться на рассылку")
+        builder.button(text="❌ Отписаться от рассылки")
 
     if is_admin:
         builder.button(text="⚙ Админ-панель")
@@ -43,26 +40,3 @@ def bottom_kb(is_subscribed=False, is_admin=False):
     builder.adjust(1)
 
     return builder.as_markup(resize_keyboard=True)
-
-def get_admin_panel_keyboard():
-    """
-    Клавиатура для админ-панели
-    """
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
-            [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
-            [InlineKeyboardButton(text="📢 Отправить рассылку", callback_data="send_broadcast")],
-            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
-        ]
-    )
-
-def get_back_to_main_keyboard():
-    """
-    Клавиатура для возврата в главное меню
-    """
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
-        ]
-    )
