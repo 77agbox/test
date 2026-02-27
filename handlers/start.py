@@ -6,6 +6,7 @@ from database import add_subscriber, get_subscribers, unsubscribe
 from keyboards import main_menu, bottom_kb
 from config import ADMIN_ID
 import asyncio
+from aiogram import Bot
 
 router = Router()
 
@@ -113,10 +114,10 @@ async def subscribe_user(message: types.Message, state: FSMContext):
 # ================= РАССЫЛКА =================
 
 @router.callback_query(lambda c: c.data == "send_broadcast")
-async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: types.Bot):
+async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
     if callback.from_user.id == ADMIN_ID:  # Проверка на админа
         text = "📣 Новая рассылка! Мы вас ждем на новом мастер-классе!"
-        subscribers = get_subscribers()
+        subscribers = get_subscribers()  # Получаем подписчиков
         for user_id in subscribers:
             try:
                 await bot.send_message(user_id, text)
