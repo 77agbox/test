@@ -9,6 +9,8 @@ from database import add_masterclass, get_masterclasses, delete_masterclass
 router = Router()
 
 
+# ================= FSM =================
+
 class AdminForm(StatesGroup):
     title = State()
     place = State()
@@ -19,27 +21,47 @@ class AdminForm(StatesGroup):
     link = State()
 
 
-# ===== Админ меню =====
+# ================= ПРОВЕРКА АДМИНА =================
 
-@router.message(lambda m: m.text == "⚙ Админ-панель")
-async def admin_panel(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
+def is_admin(user_id: int):
+    return user_id == ADMIN_ID
+
+
+# ================= ОТКРЫТЬ ПАНЕЛЬ =================
+
+@router.callback_query(lambda c: c.data == "admin_panel")
+async def open_admin_panel(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer()
         return
 
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
-        [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
-    ])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
+            [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
+        ]
+    )
 
-    await message.answer("Админ-панель:", reply_markup=keyboard)
+    await callback.message.edit_text(
+        "⚙ <b>Админ-панель</b>\n\nВыберите действие:",
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
+
+    await callback.answer()
 
 
-# ===== Добавление =====
+# ================= ДОБАВЛЕНИЕ =================
 
 @router.callback_query(lambda c: c.data == "admin_add")
 async def admin_add_start(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+
     await state.set_state(AdminForm.title)
-    await callback.message.answer("Название мастер-класса:")
+    await callback.message.answer("Введите название мастер-класса:")
     await callback.answer()
 
 
@@ -58,7 +80,7 @@ async def admin_place(message: types.Message, state: FSMContext):
 
 
 @router.message(AdminForm.description)
-async def admin_desc(message: types.Message, state: FSMContext):
+async def admin_description(message: types.Message, state: FSMContext):
     await state.update_data(description=message.text)
     await state.set_state(AdminForm.teacher)
     await message.answer("Педагог:")
@@ -92,14 +114,18 @@ async def admin_link(message: types.Message, state: FSMContext):
 
     add_masterclass(data)
 
-    await message.answer("✅ Мастер-класс добавлен.")
+    await message.answer("✅ Мастер-класс успешно добавлен.")
     await state.clear()
 
 
-# ===== Удаление =====
+# ================= УДАЛЕНИЕ =================
 
 @router.callback_query(lambda c: c.data == "admin_delete")
 async def admin_delete(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+
     rows = get_masterclasses()
 
     if not rows:
@@ -111,22 +137,40 @@ async def admin_delete(callback: types.CallbackQuery):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=row[1],
-                    callback_data=f"del_{row[0]}"
+                    text=row[1],  # title
+                    callback_data=f"del_{row[0]}"  # id
                 )
             ]
             for row in rows
+        ] + [
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="admin_panel")]
         ]
     )
 
-    await callback.message.answer("Выберите для удаления:", reply_markup=keyboard)
+    await callback.message.edit_text(
+        "Выберите мастер-класс для удаления:",
+        reply_markup=keyboard
+    )
+
     await callback.answer()
 
 
 @router.callback_query(lambda c: c.data.startswith("del_"))
 async def confirm_delete(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+
     mc_id = int(callback.data.split("_")[1])
     delete_masterclass(mc_id)
 
-    await callback.message.answer("❌ Мастер-класс удалён.")
+    await callback.message.edit_text(
+        "❌ Мастер-класс удалён.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="⬅ Назад", callback_data="admin_panel")]
+            ]
+        )
+    )
+
     await callback.answer()
