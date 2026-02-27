@@ -3,7 +3,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from database import add_subscriber, get_subscribers, unsubscribe
-from keyboards import main_menu, admin_panel_kb, bottom_kb
+from keyboards import main_menu, get_admin_panel_keyboard, bottom_kb  # Измените на правильный импорт
 from config import ADMIN_ID
 from aiogram import Bot  # Правильный импорт Bot
 
@@ -104,3 +104,4 @@ async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: 
         await callback.message.answer("✅ Рассылка отправлена всем подписчикам.")
     else:
         await callback.message.answer("❌ Вы не админ, рассылку можно отправлять только администратору.")
+
