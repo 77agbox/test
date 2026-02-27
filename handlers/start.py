@@ -1,5 +1,5 @@
 from aiogram import Router, types
-from aiogram.filters import CommandStart, StateFilter
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from database import add_subscriber, get_subscribers, unsubscribe, check_subscription
@@ -7,6 +7,7 @@ from keyboards import main_menu, bottom_kb
 from config import ADMIN_ID
 import asyncio
 from aiogram import Bot
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton  # Добавляем импорты для кнопок
 
 router = Router()
 
