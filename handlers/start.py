@@ -1,5 +1,5 @@
 from aiogram import Router, types
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from database import add_subscriber, get_subscribers, unsubscribe, check_subscription
@@ -81,7 +81,7 @@ async def support_start(message: types.Message, state: FSMContext):
 
 
 # ======================= СОХРАНЕНИЕ ДАННЫХ =======================
-@router.message(MasterForm.waiting_name)
+@router.message(StateFilter(MasterForm.waiting_name))
 async def signup_name(message: types.Message, state: FSMContext):
     """
     Обработчик для ввода имени пользователя.
@@ -91,7 +91,7 @@ async def signup_name(message: types.Message, state: FSMContext):
     await message.answer("Введите номер телефона:")
 
 
-@router.message(MasterForm.waiting_phone)
+@router.message(StateFilter(MasterForm.waiting_phone))
 async def signup_phone(message: types.Message, state: FSMContext):
     """
     Обработчик для ввода номера телефона.
@@ -149,7 +149,7 @@ async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: 
         await callback.message.answer("❌ Вы не админ, рассылку можно отправлять только администратору.")
 
 
-@router.message(state="waiting_for_broadcast")
+@router.message(StateFilter("waiting_for_broadcast"))
 async def handle_broadcast(message: types.Message, state: FSMContext, bot: Bot):
     """
     Обработчик для текста рассылки.
