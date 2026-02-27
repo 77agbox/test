@@ -1,12 +1,9 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
-
-# ======================= Главное меню =======================
 def main_menu(is_admin=False):
     """
     Главное меню. Если администратор, то добавляется кнопка для админ-панели.
-    Все кнопки в главном меню, включая "Написать в поддержку", "Начать заново" и другие.
     """
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -16,28 +13,46 @@ def main_menu(is_admin=False):
         ]
     )
 
-    # Если админ, добавляем кнопку админ-панели
     if is_admin:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel")])
+        keyboard.add(InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel"))
 
     return keyboard
 
 
-# ======================= Клавиатура для кнопок "Начать заново" и "Написать в поддержку" =======================
 def bottom_kb(is_subscribed=False, is_admin=False):
     """
-    Нижняя клавиатура теперь не содержит кнопок, оставим их в главном меню.
+    Нижняя клавиатура (Reply).
+    Всегда:
+    - Начать заново
+    - Написать в поддержку
     """
     builder = ReplyKeyboardBuilder()
 
-    if not is_admin:
-        if is_subscribed:
-            builder.button(text="❌ Отписаться от рассылки")  # Кнопка для отписки, если подписан
-        else:
-            builder.button(text="📢 Подписаться на рассылку")  # Кнопка для подписки, если не подписан
+    builder.button(text="🏠 Начать заново")
+    builder.button(text="✉ Написать в поддержку")
+    
+    if not is_subscribed:
+        builder.button(text="📢 Подписаться на рассылку")
+    else:
+        builder.button(text="❌ Отписаться от рассылки")
 
-    builder.button(text="✉ Написать в поддержку")  # Кнопка для написания в поддержку
-    builder.button(text="🏠 Начать заново")  # Кнопка для перезапуска бота
+    if is_admin:
+        builder.button(text="⚙ Админ-панель")
 
     builder.adjust(1)
+
     return builder.as_markup(resize_keyboard=True)
+
+
+def admin_panel_kb():
+    """
+    Клавиатура для админ-панели.
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
+            [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
+            [InlineKeyboardButton(text="📢 Отправить рассылку", callback_data="send_broadcast")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
+        ]
+    )
