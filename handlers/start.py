@@ -82,32 +82,36 @@ async def support_start(message: types.Message, state: FSMContext):
 
 
 # ======================= СОХРАНЕНИЕ ДАННЫХ =======================
-@router.message(MasterForm.waiting_name)
+@router.message()
 async def signup_name(message: types.Message, state: FSMContext):
     """
     Обработчик для ввода имени пользователя.
     """
-    await state.update_data(name=message.text)
-    await state.set_state(MasterForm.waiting_phone)
-    await message.answer("Введите номер телефона:")
+    current_state = await state.get_state()
+    if current_state == MasterForm.waiting_name.state:
+        await state.update_data(name=message.text)
+        await state.set_state(MasterForm.waiting_phone)
+        await message.answer("Введите номер телефона:")
 
 
-@router.message(MasterForm.waiting_phone)
+@router.message()
 async def signup_phone(message: types.Message, state: FSMContext):
     """
     Обработчик для ввода номера телефона.
     Сохраняем данные пользователя в базе данных.
     """
-    data = await state.get_data()
+    current_state = await state.get_state()
+    if current_state == MasterForm.waiting_phone.state:
+        data = await state.get_data()
 
-    # Сохраняем подписчика
-    add_subscriber(message.from_user.id, data['name'], message.text)
+        # Сохраняем подписчика
+        add_subscriber(message.from_user.id, data['name'], message.text)
 
-    await message.answer(
-        f"✅ Вы подписаны на мастер-классы.\nМы будем с вами на связи для дальнейших действий.",
-        reply_markup=bottom_kb(is_subscribed=True),
-    )
-    await state.clear()
+        await message.answer(
+            f"✅ Вы подписаны на мастер-классы.\nМы будем с вами на связи для дальнейших действий.",
+            reply_markup=bottom_kb(is_subscribed=True),
+        )
+        await state.clear()
 
 
 # ======================= ОТПИСАТЬСЯ ОТ РАССЫЛКИ =======================
@@ -150,22 +154,24 @@ async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: 
         await callback.message.answer("❌ Вы не админ, рассылку можно отправлять только администратору.")
 
 
-@router.message(lambda message: message.text, state="waiting_for_broadcast")
+@router.message()
 async def handle_broadcast(message: types.Message, state: FSMContext, bot: Bot):
     """
     Обработчик для текста рассылки.
     """
-    text = message.text
-    subscribers = get_subscribers()
-    for user_id in subscribers:
-        try:
-            await bot.send_message(user_id, text)
-            await asyncio.sleep(0.1)  # Задержка для безопасной рассылки
-        except Exception as e:
-            print(f"Ошибка при отправке сообщения {user_id}: {e}")
-    
-    await message.answer("✅ Рассылка отправлена всем подписчикам.")
-    await state.clear()
+    current_state = await state.get_state()
+    if current_state == "waiting_for_broadcast":
+        text = message.text
+        subscribers = get_subscribers()
+        for user_id in subscribers:
+            try:
+                await bot.send_message(user_id, text)
+                await asyncio.sleep(0.1)  # Задержка для безопасной рассылки
+            except Exception as e:
+                print(f"Ошибка при отправке сообщения {user_id}: {e}")
+        
+        await message.answer("✅ Рассылка отправлена всем подписчикам.")
+        await state.clear()
 
 
 # ======================= АДМИН-ПАНЕЛЬ =======================
