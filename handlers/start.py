@@ -21,12 +21,14 @@ class SupportForm(StatesGroup):
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
 
+    is_admin = message.from_user.id == ADMIN_ID
+
     await message.answer(
         "👋 <b>Здравствуйте!</b>\n\n"
         "Я бот Центра «Виктория».\n\n"
         "Выберите интересующий раздел:",
         parse_mode="HTML",
-        reply_markup=main_menu(),
+        reply_markup=main_menu(is_admin=is_admin),
     )
 
 
@@ -36,9 +38,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def restart(message: types.Message, state: FSMContext):
     await state.clear()
 
+    is_admin = message.from_user.id == ADMIN_ID
+
     await message.answer(
         "Выберите раздел:",
-        reply_markup=main_menu(),
+        reply_markup=main_menu(is_admin=is_admin),
     )
 
 
@@ -74,10 +78,12 @@ async def support_send(message: types.Message, state: FSMContext):
         disable_web_page_preview=True,
     )
 
+    is_admin = message.from_user.id == ADMIN_ID
+
     await message.answer(
         "✅ Ваше сообщение отправлено администратору.\n"
         "Мы свяжемся с вами при необходимости.",
-        reply_markup=bottom_kb(),
+        reply_markup=bottom_kb(is_admin=is_admin),
     )
 
     await state.clear()
@@ -89,8 +95,11 @@ async def support_send(message: types.Message, state: FSMContext):
 async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
 
+    is_admin = callback.from_user.id == ADMIN_ID
+
     await callback.message.edit_text(
         "Выберите раздел:",
-        reply_markup=main_menu(),
+        reply_markup=main_menu(is_admin=is_admin),
     )
+
     await callback.answer()
