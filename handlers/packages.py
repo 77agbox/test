@@ -1,15 +1,13 @@
 from aiogram import Router, types
-from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.types import ReplyKeyboardRemove
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import ADMIN_ID
-from keyboards import bottom_kb
+from keyboards import main_menu
 
 router = Router()
 
-# === Тарифы (не трогаем) ===
 PACKAGE_MODULES = {
     "Картинг": [2200, 2100, 2000],
     "Симрейсинг": [1600, 1500, 1400],
@@ -20,7 +18,6 @@ PACKAGE_MODULES = {
 }
 
 
-# === FSM ===
 class PackageForm(StatesGroup):
     people = State()
     activities = State()
@@ -28,26 +25,22 @@ class PackageForm(StatesGroup):
     phone = State()
 
 
-# === Клавиатура активностей ===
 def activities_keyboard(selected=None):
     selected = selected or []
-    builder = ReplyKeyboardBuilder()
-
+    rows = []
     for name in PACKAGE_MODULES:
-        text = f"{'✅ ' if name in selected else ''}{name}"
-        builder.button(text=text)
+        label = f"✅ {name}" if name in selected else name
+        rows.append([InlineKeyboardButton(text=label, callback_data=f"act_{name}")])
 
-    builder.button(text="🟢 Готово")
-    builder.adjust(2, 1)
+    rows.append([InlineKeyboardButton(text="🟢 Готово", callback_data="act_done")])
+    rows.append([InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
-    return builder.as_markup(resize_keyboard=True)
 
-
-# === Старт из меню ===
 @router.callback_query(lambda c: c.data == "m_package")
 async def start_package(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(PackageForm.people)
-    await callback.message.answer(
+    await callback.message.edit_text(
         "👥 <b>Пакетные туры</b>\n\n"
         "Введите количество человек.\n"
         "<i>Минимально — от 5 человек.</i>",
@@ -56,7 +49,6 @@ async def start_package(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# === Количество человек ===
 @router.message(PackageForm.people)
 async def get_people(message: types.Message, state: FSMContext):
     try:
@@ -64,7 +56,7 @@ async def get_people(message: types.Message, state: FSMContext):
         if people < 5:
             await message.answer("❗ Минимум 5 человек.")
             return
-    except:
+    except ValueError:
         await message.answer("Введите число.")
         return
 
@@ -78,41 +70,40 @@ async def get_people(message: types.Message, state: FSMContext):
     )
 
 
-# === Выбор активностей ===
-@router.message(PackageForm.activities)
-async def choose_activities(message: types.Message, state: FSMContext):
-    text = message.text.replace("✅ ", "").strip()
+@router.callback_query(PackageForm.activities, lambda c: c.data.startswith("act_"))
+async def choose_activity(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected = data.get("selected", [])
+    activity = callback.data.replace("act_", "")
+
+    if activity in PACKAGE_MODULES:
+        if activity in selected:
+            selected.remove(activity)
+        else:
+            if len(selected) >= 3:
+                await callback.answer("Можно выбрать максимум 3 активности.", show_alert=True)
+                return
+            selected.append(activity)
+
+    await state.update_data(selected=selected)
+    await callback.message.edit_reply_markup(reply_markup=activities_keyboard(selected))
+    await callback.answer()
+
+
+@router.callback_query(PackageForm.activities, lambda c: c.data == "act_done")
+async def activities_done(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     selected = data.get("selected", [])
 
-    if text == "🟢 Готово":
-        if not 1 <= len(selected) <= 3:
-            await message.answer("Выберите от 1 до 3 активностей.")
-            return
-
-        await state.set_state(PackageForm.name)
-        await message.answer("📝 Ваше имя:", reply_markup=ReplyKeyboardRemove())
+    if not 1 <= len(selected) <= 3:
+        await callback.answer("Выберите от 1 до 3 активностей.", show_alert=True)
         return
 
-    if text in PACKAGE_MODULES:
-        if text in selected:
-            selected.remove(text)
-        else:
-            if len(selected) >= 3:
-                await message.answer("Можно выбрать максимум 3 активности.")
-                return
-            selected.append(text)
-
-        await state.update_data(selected=selected)
-
-        await message.answer(
-            f"Вы выбрали: <b>{', '.join(selected) if selected else 'ничего'}</b>",
-            parse_mode="HTML",
-            reply_markup=activities_keyboard(selected),
-        )
+    await state.set_state(PackageForm.name)
+    await callback.message.edit_text("📝 Ваше имя:")
+    await callback.answer()
 
 
-# === Имя ===
 @router.message(PackageForm.name)
 async def get_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text.strip())
@@ -120,7 +111,6 @@ async def get_name(message: types.Message, state: FSMContext):
     await message.answer("📞 Телефон для связи:")
 
 
-# === Завершение ===
 @router.message(PackageForm.phone)
 async def finish_package(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -139,17 +129,12 @@ async def finish_package(message: types.Message, state: FSMContext):
     for act in selected:
         price_per_person = PACKAGE_MODULES[act][price_index]
         cost = price_per_person * people
-
         per_person_total += price_per_person
         total += cost
-
-        lines.append(
-            f"• {act}: <b>{price_per_person} ₽</b> с человека"
-        )
+        lines.append(f"• {act}: <b>{price_per_person} ₽</b> с человека")
 
     activities_text = "\n".join(lines)
 
-    # === Сообщение админу ===
     username_link = (
         f'<a href="https://t.me/{message.from_user.username}">@{message.from_user.username}</a>'
         if message.from_user.username
@@ -172,7 +157,6 @@ async def finish_package(message: types.Message, state: FSMContext):
         disable_web_page_preview=True,
     )
 
-    # === Сообщение клиенту ===
     await message.answer(
         f"✅ <b>Ваша заявка принята!</b>\n\n"
         f"<b>Количество человек:</b> {people}\n"
@@ -183,7 +167,7 @@ async def finish_package(message: types.Message, state: FSMContext):
         f"👥 <b>Общая сумма для группы: {total} ₽</b>\n\n"
         f"С вами скоро свяжется администратор.",
         parse_mode="HTML",
-        reply_markup=bottom_kb(),
+        reply_markup=main_menu(is_admin=(message.from_user.id == ADMIN_ID)),
     )
 
     await state.clear()

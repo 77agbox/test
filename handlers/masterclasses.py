@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 
 from database import get_masterclasses
 from config import ADMIN_ID
+from keyboards import main_menu
 
 router = Router()
 
@@ -36,7 +37,7 @@ async def show_masterclasses(callback: types.CallbackQuery):
                 )
             ]
             for row in rows
-        ]
+        ] + [[InlineKeyboardButton(text="⬅ В меню", callback_data="back_main")]]
     )
 
     await callback.message.edit_text(
@@ -138,7 +139,8 @@ async def signup_phone(message: types.Message, state: FSMContext):
 
     await message.answer(
         "✅ Вы записаны!\n"
-        "Администратор свяжется с вами."
+        "Администратор свяжется с вами.",
+        reply_markup=main_menu(is_admin=(message.from_user.id == ADMIN_ID))
     )
 
     await state.clear()

@@ -1,42 +1,16 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-def main_menu(is_admin=False):
-    """
-    Главное меню. Если администратор, то добавляется кнопка для админ-панели.
-    """
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🎓 Кружки", callback_data="m_clubs")],
-            [InlineKeyboardButton(text="🎯 Пакетные туры", callback_data="m_package")],
-            [InlineKeyboardButton(text="🎨 Мастер-классы", callback_data="m_master")]
-        ]
-    )
+
+def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
+    keyboard = [
+        [InlineKeyboardButton(text="🎓 Кружки", callback_data="m_clubs")],
+        [InlineKeyboardButton(text="🎯 Пакетные туры", callback_data="m_package")],
+        [InlineKeyboardButton(text="🎨 Мастер-классы", callback_data="m_master")],
+        [InlineKeyboardButton(text="🏠 Начать заново", callback_data="back_main")],
+        [InlineKeyboardButton(text="✉ Написать в поддержку", callback_data="support_start")],
+    ]
 
     if is_admin:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel")])
+        keyboard.append([InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel")])
 
-    return keyboard
-
-def bottom_kb(is_admin=False):
-    """
-    Нижняя клавиатура (Reply).
-    Всегда:
-    - Начать заново
-    - Написать в поддержку
-    - Отписаться от рассылки (если не админ)
-    """
-    builder = ReplyKeyboardBuilder()
-
-    builder.button(text="🏠 Начать заново")
-    builder.button(text="✉ Написать в поддержку")
-    
-    if not is_admin:
-        builder.button(text="❌ Отписаться от рассылки")
-
-    if is_admin:
-        builder.button(text="⚙ Админ-панель")
-
-    builder.adjust(1)
-
-    return builder.as_markup(resize_keyboard=True)
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
