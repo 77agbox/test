@@ -14,7 +14,7 @@ def main_menu(is_admin=False):
     )
 
     if is_admin:
-        keyboard.insert(InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel"))
+        keyboard.add(InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel"))
 
     return keyboard
 
@@ -53,6 +53,16 @@ def get_admin_panel_keyboard():
             [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
             [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
             [InlineKeyboardButton(text="📢 Отправить рассылку", callback_data="send_broadcast")],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
+        ]
+    )
+
+def get_back_to_main_keyboard():
+    """
+    Клавиатура для возврата в главное меню
+    """
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
             [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
         ]
     )
