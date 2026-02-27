@@ -7,7 +7,7 @@ from keyboards import main_menu, bottom_kb
 from config import ADMIN_ID
 import asyncio
 from aiogram import Bot
-from aiogram.fsm.state import StateFilter  # Заменить на правильный импорт
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 router = Router()
 
@@ -82,7 +82,7 @@ async def support_start(message: types.Message, state: FSMContext):
 
 
 # ======================= СОХРАНЕНИЕ ДАННЫХ =======================
-@router.message(StateFilter(MasterForm.waiting_name))  # Фильтрация по состоянию "waiting_name"
+@router.message(MasterForm.waiting_name)
 async def signup_name(message: types.Message, state: FSMContext):
     """
     Обработчик для ввода имени пользователя.
@@ -92,7 +92,7 @@ async def signup_name(message: types.Message, state: FSMContext):
     await message.answer("Введите номер телефона:")
 
 
-@router.message(StateFilter(MasterForm.waiting_phone))  # Фильтрация по состоянию "waiting_phone"
+@router.message(MasterForm.waiting_phone)
 async def signup_phone(message: types.Message, state: FSMContext):
     """
     Обработчик для ввода номера телефона.
@@ -150,7 +150,7 @@ async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: 
         await callback.message.answer("❌ Вы не админ, рассылку можно отправлять только администратору.")
 
 
-@router.message(StateFilter("waiting_for_broadcast"))
+@router.message(lambda message: message.text, state="waiting_for_broadcast")
 async def handle_broadcast(message: types.Message, state: FSMContext, bot: Bot):
     """
     Обработчик для текста рассылки.
@@ -186,4 +186,3 @@ async def admin_panel(callback: types.CallbackQuery):
         await callback.message.edit_text("⚙ Админ-панель", reply_markup=keyboard)
     else:
         await callback.message.answer("❌ У вас нет прав для доступа к админ-панели.")
-
