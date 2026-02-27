@@ -2,13 +2,14 @@ from aiogram import Router, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from database import add_subscriber, get_subscribers, unsubscribe
+from database import add_subscriber, get_subscribers, unsubscribe, check_subscription
 from keyboards import main_menu, bottom_kb
 from config import ADMIN_ID
 import asyncio
 from aiogram import Bot
 
 router = Router()
+
 
 # ======================= FSM =======================
 
@@ -33,9 +34,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
     add_subscriber(user_id, name, phone)
 
-    # Отправляем главное меню
-    is_subscribed = check_subscription(user_id)  # Проверка, подписан ли пользователь на рассылку
+    # Проверяем, подписан ли пользователь на рассылку
+    is_subscribed = check_subscription(user_id)
 
+    # Отправляем главное меню
     await message.answer(
         "👋 <b>Здравствуйте!</b>\n\n"
         "Я бот Центра «Виктория».\n\n"
@@ -44,9 +46,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
         reply_markup=main_menu(is_admin=(message.from_user.id == ADMIN_ID)),  # Главное меню с админ-кнопкой
     )
 
+    # Отправляем клавиатуру с правильной кнопкой подписки или отписки
     await message.answer(
         "Пожалуйста, выберите, что вы хотите сделать.",
-        reply_markup=bottom_kb(is_subscribed=is_subscribed),  # Отображение правильной кнопки (Подписка/Отписка)
+        reply_markup=bottom_kb(is_subscribed=is_subscribed),  # Передаем информацию о подписке
     )
 
 
