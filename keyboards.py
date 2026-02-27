@@ -23,9 +23,9 @@ def main_menu(is_admin=False):
 
 
 # ======================= Нижняя клавиатура (Reply) =======================
-def bottom_kb(is_admin=False):
+def bottom_kb(is_subscribed=False, is_admin=False):
     """
-    Нижняя клавиатура. Отображает кнопки в зависимости от роли пользователя.
+    Нижняя клавиатура. Отображает кнопки в зависимости от подписки и роли пользователя.
     """
     builder = ReplyKeyboardBuilder()
 
@@ -33,14 +33,16 @@ def bottom_kb(is_admin=False):
     builder.button(text="✉ Написать в поддержку")  # Кнопка для отправки сообщения в поддержку
     
     if not is_admin:
-        builder.button(text="❌ Отписаться от рассылки")  # Кнопка для отписки от рассылки, если не админ
+        if is_subscribed:
+            builder.button(text="❌ Отписаться от рассылки")  # Кнопка для отписки, если подписан
+        else:
+            builder.button(text="📢 Подписаться на рассылку")  # Кнопка для подписки, если не подписан
 
     if is_admin:
         builder.button(text="⚙ Админ-панель")  # Кнопка для админ-панели, если админ
 
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True)
-
 
 # ======================= Клавиатура для выбора адресов =======================
 def get_club_addresses_inline_keyboard():
@@ -114,3 +116,4 @@ def get_direction_keyboard():
             [InlineKeyboardButton(text="⬅ Назад", callback_data="back_to_clubs")]  # Кнопка "Назад"
         ]
     )
+
