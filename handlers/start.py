@@ -2,6 +2,7 @@ from aiogram import Router, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton  # Добавляем эти импорты
 from database import add_subscriber, get_subscribers, unsubscribe, check_subscription
 from keyboards import main_menu, bottom_kb
 from config import ADMIN_ID
@@ -9,7 +10,6 @@ import asyncio
 from aiogram import Bot
 
 router = Router()
-
 
 # ======================= FSM =======================
 
@@ -177,10 +177,9 @@ async def admin_panel(callback: types.CallbackQuery):
                 [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
                 [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
                 [InlineKeyboardButton(text="📢 Отправить рассылку", callback_data="send_broadcast")],
-                [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]
+                [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]  # Кнопка "Назад"
             ]
         )
         await callback.message.edit_text("⚙ Админ-панель", reply_markup=keyboard)
     else:
         await callback.message.answer("❌ У вас нет прав для доступа к админ-панели.")
-
