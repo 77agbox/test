@@ -12,9 +12,9 @@ def main_menu(is_admin=False):
             [InlineKeyboardButton(text="🎨 Мастер-классы", callback_data="m_master")]
         ]
     )
-
+    
     if is_admin:
-        keyboard.inline_keyboard.append([InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel")])
+        keyboard.add(InlineKeyboardButton(text="⚙ Админ-панель", callback_data="admin_panel"))
 
     return keyboard
 
@@ -24,16 +24,12 @@ def bottom_kb(is_admin=False):
     Всегда:
     - Начать заново
     - Написать в поддержку
-    - Отписаться от рассылки (если не админ)
     """
     builder = ReplyKeyboardBuilder()
 
     builder.button(text="🏠 Начать заново")
     builder.button(text="✉ Написать в поддержку")
     
-    if not is_admin:
-        builder.button(text="❌ Отписаться от рассылки")
-
     if is_admin:
         builder.button(text="⚙ Админ-панель")
 
