@@ -243,10 +243,44 @@ async def clubs_show(callback: types.CallbackQuery, state: FSMContext):
 
 # ================= PACKAGE =================
 
+PACKAGE_MODULES = {
+    "Картинг": [2200, 2100, 2000],
+    "Симрейсинг": [1600, 1500, 1400],
+    "Практическая стрельба": [1600, 1500, 1400],
+    "Лазертаг": [1600, 1500, 1400],
+    "Керамика": [1600, 1500, 1400],
+    "Мягкая игрушка": [1300, 1200, 1100],
+}
+
+
+class PackageForm(StatesGroup):
+    people = State()
+    activities = State()
+    name = State()
+    phone = State()
+
+
+def activities_keyboard(selected=None):
+    selected = selected or []
+    builder = ReplyKeyboardBuilder()
+
+    for name in PACKAGE_MODULES:
+        text = f"{name} {'✅' if name in selected else ''}".strip()
+        builder.button(text=text)
+
+    # Кнопка "Готово" отдельной строкой
+    builder.button(text="🟢 Готово")
+    builder.adjust(2, 1)
+
+    return builder.as_markup(resize_keyboard=True)
+
+
 @dp.callback_query(lambda c: c.data == "m_package")
 async def package_start(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(PackageForm.people)
-    await callback.message.answer("Сколько человек?")
+    await callback.message.answer(
+        "Сколько человек в группе?\n\nМинимум от 5 человек."
+    )
     await callback.answer()
 
 
@@ -254,6 +288,9 @@ async def package_start(callback: types.CallbackQuery, state: FSMContext):
 async def package_people(message: types.Message, state: FSMContext):
     try:
         people = int(message.text)
+        if people < 5:
+            await message.answer("Минимальное количество — от 5 человек.")
+            return
     except:
         await message.answer("Введите число.")
         return
@@ -261,58 +298,103 @@ async def package_people(message: types.Message, state: FSMContext):
     await state.update_data(people=people, selected=[])
     await state.set_state(PackageForm.activities)
 
-    builder = ReplyKeyboardBuilder()
-    for name in PACKAGE_MODULES:
-        builder.button(text=name)
-    builder.button(text="Готово")
-    builder.adjust(2)
-
-    await message.answer("Выберите активности:", reply_markup=builder.as_markup(resize_keyboard=True))
+    await message.answer(
+        "Выберите от 1 до 3 активностей:",
+        reply_markup=activities_keyboard(),
+    )
 
 
 @dp.message(PackageForm.activities)
 async def package_activities(message: types.Message, state: FSMContext):
+    text = message.text.replace(" ✅", "").strip()
     data = await state.get_data()
-    selected = data["selected"]
+    selected = data.get("selected", [])
 
-    if message.text == "Готово":
-        if not selected:
-            await message.answer("Выберите хотя бы одну активность.")
+    if text == "🟢 Готово":
+        if not 1 <= len(selected) <= 3:
+            await message.answer("Выберите от 1 до 3 активностей.")
             return
+
         await state.set_state(PackageForm.name)
         await message.answer("Ваше имя:", reply_markup=ReplyKeyboardRemove())
         return
 
-    if message.text in PACKAGE_MODULES and message.text not in selected:
-        selected.append(message.text)
+    if text in PACKAGE_MODULES:
+        if text in selected:
+            selected.remove(text)
+        else:
+            if len(selected) >= 3:
+                await message.answer("Можно выбрать максимум 3 активности.")
+                return
+            selected.append(text)
+
         await state.update_data(selected=selected)
-        await message.answer(f"Добавлено: {message.text}")
+
+        await message.answer(
+            f"Выбрано: {', '.join(selected) if selected else 'ничего'}",
+            reply_markup=activities_keyboard(selected),
+        )
 
 
 @dp.message(PackageForm.name)
 async def package_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text)
+    await state.update_data(name=message.text.strip())
     await state.set_state(PackageForm.phone)
-    await message.answer("Телефон:")
+    await message.answer("Телефон для связи:")
 
 
 @dp.message(PackageForm.phone)
 async def package_finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
+
+    people = data["people"]
+    selected = data["selected"]
+    name = data["name"]
+    phone = message.text.strip()
+
+    price_index = len(selected) - 1
+
     total = 0
-    idx = len(data["selected"]) - 1
+    lines = []
 
-    for act in data["selected"]:
-        total += PACKAGE_MODULES[act][idx] * data["people"]
+    for act in selected:
+        price_per_person = PACKAGE_MODULES[act][price_index]
+        cost = price_per_person * people
+        total += cost
 
+        lines.append(
+            f"{act}: {price_per_person} ₽ × {people} = {cost} ₽"
+        )
+
+    calc_text = "\n".join(lines)
+
+    # === Сообщение админу ===
     await bot.send_message(
         ADMIN_ID,
-        f"Новая заявка\n{data['name']}\n{message.text}\n{data['selected']}\nИтого: {total}"
+        f"🛒 Новая заявка на пакетный тур\n\n"
+        f"Имя: {name}\n"
+        f"Телефон: {phone}\n"
+        f"TG: @{message.from_user.username or 'нет username'}\n"
+        f"TG ID: {message.from_user.id}\n\n"
+        f"Количество человек: {people}\n"
+        f"Активности: {', '.join(selected)}\n\n"
+        f"{calc_text}\n\n"
+        f"Итого: {total} ₽"
     )
 
-    await message.answer("Заявка отправлена!", reply_markup=bottom_kb())
-    await state.clear()
+    # === Сообщение клиенту ===
+    await message.answer(
+        f"✅ Ваша заявка принята!\n\n"
+        f"Количество человек: {people}\n"
+        f"Активности: {', '.join(selected)}\n\n"
+        f"Расчёт стоимости:\n"
+        f"{calc_text}\n\n"
+        f"💰 Общая стоимость: {total} ₽\n\n"
+        f"С вами скоро свяжется администратор для подтверждения.",
+        reply_markup=bottom_kb(),
+    )
 
+    await state.clear()
 # ================= MASTER =================
 
 @dp.callback_query(lambda c: c.data == "m_master")
@@ -368,3 +450,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
