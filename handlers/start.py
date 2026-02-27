@@ -2,39 +2,33 @@ from aiogram import Router, types
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from database import add_subscriber, get_subscribers, unsubscribe, check_subscription
-from keyboards import main_menu, bottom_kb
+from database import add_subscriber, get_subscribers, unsubscribe
+from keyboards import main_menu, admin_panel_kb, bottom_kb
 from config import ADMIN_ID
-import asyncio
-from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 router = Router()
 
-# ======================= FSM =======================
+# ================= FSM =================
+
 class MasterForm(StatesGroup):
     waiting_name = State()  # Состояние для ввода имени
     waiting_phone = State()  # Состояние для ввода телефона
 
+# ================= СТАРТ =================
 
-# ======================= СТАРТ =======================
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    """
-    Обработчик команды /start. Сохраняет данные пользователя и выводит главное меню.
-    """
     await state.clear()
 
     # Сохраняем данные пользователя (имя и телефон)
     user_id = message.from_user.id
     name = message.from_user.first_name
-    phone = "Не указан"  # Можно изменить, если добавите сбор номера телефона
+    phone = "Не указан"
 
-    # Добавляем пользователя в базу данных
     add_subscriber(user_id, name, phone)
 
     # Проверяем, подписан ли пользователь на рассылку
-    is_subscribed = check_subscription(user_id)
+    is_subscribed = get_subscribers().count(user_id) > 0
 
     # Отправляем главное меню
     await message.answer(
@@ -52,143 +46,60 @@ async def cmd_start(message: types.Message, state: FSMContext):
     )
 
 
-# ======================= НАЧАТЬ ЗАНОВО =======================
 @router.message(lambda m: m.text == "🏠 Начать заново")
 async def restart(message: types.Message, state: FSMContext):
-    """
-    Обработчик для кнопки "Начать заново". Очистка состояния и вывод главного меню.
-    """
     await state.clear()
 
     await message.answer(
         "Выберите раздел:",
-        reply_markup=main_menu(is_admin=(message.from_user.id == ADMIN_ID)),  # Главное меню с админ-кнопкой
+        reply_markup=main_menu(is_admin=False),
     )
 
 
-# ======================= ПОДДЕРЖКА =======================
-@router.message(lambda m: m.text == "✉ Написать в поддержку")
-async def support_start(message: types.Message, state: FSMContext):
-    """
-    Обработчик для кнопки "Написать в поддержку". Запускает процесс сбора сообщения для администратора.
-    """
-    await state.set_state(MasterForm.waiting_name)
+# ================= ПОДПИСАТЬСЯ И ОТПИСАТЬСЯ =================
 
-    await message.answer(
-        "Опишите проблему или вопрос.\n\n"
-        "Сообщение будет отправлено администратору.",
-        reply_markup=types.ReplyKeyboardRemove(),
-    )
-
-
-# ======================= СОХРАНЕНИЕ ДАННЫХ =======================
-@router.message()
-async def signup_name(message: types.Message, state: FSMContext):
-    """
-    Обработчик для ввода имени пользователя.
-    """
-    current_state = await state.get_state()
-    if current_state == MasterForm.waiting_name.state:
-        await state.update_data(name=message.text)
-        await state.set_state(MasterForm.waiting_phone)
-        await message.answer("Введите номер телефона:")
-
-
-@router.message()
-async def signup_phone(message: types.Message, state: FSMContext):
-    """
-    Обработчик для ввода номера телефона.
-    Сохраняем данные пользователя в базе данных.
-    """
-    current_state = await state.get_state()
-    if current_state == MasterForm.waiting_phone.state:
-        data = await state.get_data()
-
-        # Сохраняем подписчика
-        add_subscriber(message.from_user.id, data['name'], message.text)
-
-        await message.answer(
-            f"✅ Вы подписаны на мастер-классы.\nМы будем с вами на связи для дальнейших действий.",
-            reply_markup=bottom_kb(is_subscribed=True),
-        )
-        await state.clear()
-
-
-# ======================= ОТПИСАТЬСЯ ОТ РАССЫЛКИ =======================
 @router.message(lambda m: m.text == "❌ Отписаться от рассылки")
 async def unsubscribe_user(message: types.Message, state: FSMContext):
-    """
-    Обработчик для кнопки "Отписаться от рассылки". Отписываем пользователя и обновляем меню.
-    """
     user_id = message.from_user.id
     unsubscribe(user_id)
 
-    await message.answer("❌ Вы отписались от рассылки.", reply_markup=bottom_kb(is_subscribed=False))
+    await message.answer("❌ Вы отписались от рассылки.", reply_markup=bottom_kb(is_subscribed=False, is_admin=False))
 
 
-# ======================= ПОДПИСАТЬСЯ НА РАССЫЛКУ =======================
 @router.message(lambda m: m.text == "📢 Подписаться на рассылку")
 async def subscribe_user(message: types.Message, state: FSMContext):
-    """
-    Подписать пользователя на рассылку.
-    """
     user_id = message.from_user.id
     name = message.from_user.first_name
     phone = "Не указан"
 
     add_subscriber(user_id, name, phone)
 
-    await message.answer("✅ Вы подписались на рассылку.", reply_markup=bottom_kb(is_subscribed=True))
+    await message.answer("✅ Вы подписались на рассылку.", reply_markup=bottom_kb(is_subscribed=True, is_admin=False))
 
 
-# ======================= РАССЫЛКА =======================
-@router.callback_query(lambda c: c.data == "send_broadcast")
-async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
-    """
-    Обработчик для кнопки "Отправить рассылку". Отправляет сообщение всем подписчикам.
-    """
+# ================= АДМИН-ПАНЕЛЬ =================
+
+@router.callback_query(lambda c: c.data == "admin_panel")
+async def admin_panel(callback: types.CallbackQuery):
     if callback.from_user.id == ADMIN_ID:  # Проверка на админа
-        await callback.message.answer("Введите текст рассылки:")
-        await state.set_state("waiting_for_broadcast")
+        keyboard = admin_panel_kb()  # Клавиатура для админ-панели
+        await callback.message.edit_text("⚙ Админ-панель", reply_markup=keyboard)
     else:
-        await callback.message.answer("❌ Вы не админ, рассылку можно отправлять только администратору.")
+        await callback.message.answer("❌ У вас нет прав для доступа к админ-панели.")
 
 
-@router.message()
-async def handle_broadcast(message: types.Message, state: FSMContext, bot: Bot):
-    """
-    Обработчик для текста рассылки.
-    """
-    current_state = await state.get_state()
-    if current_state == "waiting_for_broadcast":
-        text = message.text
+# ================= РАССЫЛКА =================
+
+@router.callback_query(lambda c: c.data == "send_broadcast")
+async def send_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: types.Bot):
+    if callback.from_user.id == ADMIN_ID:
+        text = "📣 Новая рассылка! Мы вас ждем на новом мастер-классе!"
         subscribers = get_subscribers()
         for user_id in subscribers:
             try:
                 await bot.send_message(user_id, text)
-                await asyncio.sleep(0.1)  # Задержка для безопасной рассылки
             except Exception as e:
                 print(f"Ошибка при отправке сообщения {user_id}: {e}")
-        
-        await message.answer("✅ Рассылка отправлена всем подписчикам.")
-        await state.clear()
-
-
-# ======================= АДМИН-ПАНЕЛЬ =======================
-@router.callback_query(lambda c: c.data == "admin_panel")
-async def admin_panel(callback: types.CallbackQuery):
-    """
-    Обработчик для кнопки "Админ-панель". Показывает админ-панель с возможностью управления мастер-классами и рассылкой.
-    """
-    if callback.from_user.id == ADMIN_ID:  # Проверка на админа
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="➕ Добавить мастер-класс", callback_data="admin_add")],
-                [InlineKeyboardButton(text="➖ Удалить мастер-класс", callback_data="admin_delete")],
-                [InlineKeyboardButton(text="📢 Отправить рассылку", callback_data="send_broadcast")],
-                [InlineKeyboardButton(text="⬅ Назад", callback_data="back_main")]  # Кнопка "Назад"
-            ]
-        )
-        await callback.message.edit_text("⚙ Админ-панель", reply_markup=keyboard)
+        await callback.message.answer("✅ Рассылка отправлена всем подписчикам.")
     else:
-        await callback.message.answer("❌ У вас нет прав для доступа к админ-панели.")
+        await callback.message.answer("❌ Вы не админ, рассылку можно отправлять только администратору.")
